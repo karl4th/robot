@@ -120,3 +120,35 @@ not guarantee absence of translation. Mounting rotation is not calibrated; no
 yaw, velocity integration, stationarity inference, or GPS drift suppression is
 implemented. Samples older than one second are cleared. IMU stays live when the
 lidar display is frozen. Restarting the dashboard clears the in-memory GPS track.
+
+## Magnetic sensor
+
+```sh
+uv run dashboard.py --port /dev/cu.usbserial-0001 --gps-port /dev/cu.usbserial-112110 --imu-port /dev/cu.usbserial-112120 --mag-port /dev/cu.usbserial-112140
+```
+
+The supplied compass sketch targets QMC5883L at I2C address 0x0D. The desktop
+reader supports `MAG,x,y,z` at 115200 baud and legacy `X: ... Y: ... Z: ...`
+lines at 9600 baud, with automatic probing on the explicitly selected port.
+Use `--mag-baud` to select one of these rates. No firmware is uploaded.
+
+Control value 0x1D selects continuous mode, 200 Hz device ODR, +/-8 gauss and
+OSR 512. The sketch's 100 ms delay limits serial reporting to about 10 Hz;
+legacy firmware may use another rate. The UI shows observed receive frequency.
+Field conversion assumes +/-8 gauss (3000 counts/gauss, 100 microtesla/gauss).
+Use `--mag-range 2` only for firmware configured to +/-2 gauss (12000 counts/gauss).
+The connected firmware configuration and chip identity are not read back.
+
+The direction dial is the raw XY field angle `atan2(y, x)` modulo 360 degrees,
+with +X at the top and +Y at the right. It is not calibrated magnetic or true
+north heading. Hard/soft iron calibration, declination, mounting alignment and
+tilt compensation are absent. The panel does not fuse IMU or GPS data. Zero
+horizontal field or integer endpoint clipping hides the angle. Stale serial
+samples are cleared after one second; identical triples report unchanged age.
+
+The supplied sketch prints old values after a short I2C read, and transmits no
+acquisition validity, sequence, timestamp or overflow status. Serial freshness
+cannot prove sensor freshness. Recommended firmware follow-up: initialize
+set/reset period register 0x0B to 0x01; check I2C transaction results and status
+register 0x06; emit samples only after successful fresh reads, with explicit
+error/status information. The desktop parser cannot recover those missing flags.

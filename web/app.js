@@ -112,3 +112,30 @@ async function pollIMU(){
  imuUpdate();setTimeout(pollIMU,100);
 }
 new ResizeObserver(drawTilt).observe(tiltCanvas);pollIMU();
+
+let mag={status:'offline',sample:null};
+const magCanvas=$('mag-dial'),mc=magCanvas.getContext('2d');
+function drawMag(){
+ const rect=magCanvas.getBoundingClientRect(),w=rect.width,h=rect.height,dpr=devicePixelRatio||1;
+ magCanvas.width=Math.round(w*dpr);magCanvas.height=Math.round(h*dpr);mc.setTransform(dpr,0,0,dpr,0,0);
+ mc.clearRect(0,0,w,h);const x=w/2,y=h/2+8,r=Math.min(w*.34,h*.33);mc.strokeStyle='#b0c09f';mc.lineWidth=1;mc.beginPath();mc.arc(x,y,r,0,Math.PI*2);mc.stroke();
+ for(let d=0;d<360;d+=15){const a=d*Math.PI/180,inner=r-(d%90===0?10:5);mc.beginPath();mc.moveTo(x+Math.sin(a)*inner,y-Math.cos(a)*inner);mc.lineTo(x+Math.sin(a)*r,y-Math.cos(a)*r);mc.stroke();}
+ mc.fillStyle='#78906b';mc.font='10px system-ui';mc.textAlign='center';mc.fillText('+X / 0°',x,y-r-10);mc.fillText('+Y',x+r+18,y+3);mc.fillText('180°',x,y+r+16);
+ const angle=mag.status==='live'?mag.sample?.angle_deg:null;
+ if(angle!=null){mc.save();mc.translate(x,y);mc.rotate(angle*Math.PI/180);mc.fillStyle='#d7b542';mc.beginPath();mc.moveTo(0,-r+14);mc.lineTo(-8,9);mc.lineTo(0,3);mc.lineTo(8,9);mc.closePath();mc.fill();mc.restore();}
+ mc.fillStyle='#617b55';mc.beginPath();mc.arc(x,y,4,0,Math.PI*2);mc.fill();
+}
+function magUpdate(){
+ const s=mag.status==='live'?mag.sample:null,v=(x,n=1,u='')=>x==null?'—':x.toFixed(n)+u;
+ $('mag-status').textContent=s?'UNCALIBRATED':mag.status==='disabled'?'NOT CONFIGURED':'OFFLINE';
+ $('mag-angle').textContent=v(s?.angle_deg,1,'°');$('mag-norm').textContent=v(s?.norm_ut,1,' µT');
+ ['x','y','z'].forEach((a,i)=>{$('mag-r'+a).textContent=s?s.raw[i]:'—';$('mag-'+a).textContent=v(s?.field_ut[i],2);});
+ $('mag-hz').textContent=v(mag.hz,1,' Hz');$('mag-age').textContent=v(mag.age_ms,0,' ms');$('mag-count').textContent=mag.samples??'—';$('mag-rejected').textContent=mag.rejected??'—';$('mag-port').textContent=mag.port?`${mag.port} · ${mag.baud||'detecting'} baud`:'Set --mag-port to connect';
+ $('mag-note').textContent=s?`${s.format==='legacy'?'Legacy':'CSV'} stream · Assumed ±${mag.field_range} G.${s.clipped?' Range limit reached; angle hidden.':s.unchanged_s>2?' Values unchanged; acquisition freshness unknown.':s.angle_deg==null?' No horizontal field; angle unavailable.':' Sensor axes only; keep level for interpretation.'}`:mag.error||'Waiting for fresh serial data…';drawMag();
+}
+async function pollMag(){
+ try{const response=await fetch('/api/mag',{signal:AbortSignal.timeout(1000)});if(!response.ok)throw Error('Magnetometer unavailable');mag=await response.json();}
+ catch{mag={status:'offline',sample:null,error:'Magnetometer connection lost. Check the local server.'};}
+ magUpdate();setTimeout(pollMag,100);
+}
+new ResizeObserver(drawMag).observe(magCanvas);pollMag();
