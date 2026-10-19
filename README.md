@@ -83,3 +83,40 @@ Historical tracks remain visible during GPS loss. Lidar freeze does not freeze
 GPS. Raw stationary drift is visible; this is not a filtered route or SLAM, and
 HDOP is dimensionless, not a meter accuracy estimate. Course is travel direction,
 not robot orientation. The GPS and lidar coordinates are not fused.
+
+## IMU telemetry
+
+```sh
+uv run dashboard.py --port /dev/cu.usbserial-0001 --gps-port /dev/cu.usbserial-112110 --imu-port /dev/cu.usbserial-112120
+```
+
+The reader tries 115200 and 9600 baud on the explicitly selected IMU port.
+Use `--imu-baud 115200` or `--imu-baud 9600` to select one rate. A disconnected
+receiver is retried. No serial commands or firmware uploads are performed.
+
+Supported newline-terminated formats:
+
+```text
+IMU,ax,ay,az,temp,gx,gy,gz
+Acc: X=948 Y=-16140 Z=1952 | Gyr: X=3 Y=-201 Z=-14
+```
+
+CSV fields are signed 16-bit decimal integers in the order shown. Lines beginning
+with `#` are ignored. The legacy stream has no temperature field. Neither format
+has a checksum, device timestamp, sequence number, or I2C health flag; a valid
+line proves transport and format, not successful hardware acquisition.
+
+Conversion assumes the reset ranges of +/-2 g (16384 counts/g) and +/-250 deg/s
+(131 counts per deg/s). The supplied firmware wakes the device but does not
+explicitly set or report these registers. The panel therefore labels scale
+settings as assumed and values as uncalibrated. If firmware uses other ranges,
+set `--imu-accel-range` (2, 4, 8, 16) and `--imu-gyro-range` (250, 500, 1000, 2000).
+Chip temperature uses `raw / 340 + 36.53`; it is not ambient temperature.
+
+The panel displays raw values, acceleration including gravity, angular rates,
+host-observed sample frequency, temperature when transmitted, and gravity-based
+roll/pitch in sensor axes. Tilt is hidden outside 0.8-1.2 g, but that gate does
+not guarantee absence of translation. Mounting rotation is not calibrated; no
+yaw, velocity integration, stationarity inference, or GPS drift suppression is
+implemented. Samples older than one second are cleared. IMU stays live when the
+lidar display is frozen. Restarting the dashboard clears the in-memory GPS track.

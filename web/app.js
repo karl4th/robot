@@ -84,3 +84,31 @@ async function pollGPS(){
  gpsUpdate();setTimeout(pollGPS,500);
 }
 new ResizeObserver(gpsTrack).observe(gpsCanvas);pollGPS();
+
+let imu={status:'offline',sample:null};
+const tiltCanvas=$('imu-tilt'),tc=tiltCanvas.getContext('2d');
+function drawTilt(){
+ const r=tiltCanvas.getBoundingClientRect(),w=r.width,h=r.height,dpr=devicePixelRatio||1;
+ tiltCanvas.width=Math.round(w*dpr);tiltCanvas.height=Math.round(h*dpr);tc.setTransform(dpr,0,0,dpr,0,0);
+ const s=imu.sample,valid=imu.status==='live'&&s&&s.roll_deg!=null&&s.pitch_deg!=null;
+ tc.clearRect(0,0,w,h);tc.save();tc.translate(w/2,h/2+5);const radius=Math.min(w*.38,h*.34);
+ tc.beginPath();tc.arc(0,0,radius,0,2*Math.PI);tc.clip();tc.fillStyle='#e1e9d8';tc.fillRect(-radius,-radius,2*radius,2*radius);
+ if(valid){tc.rotate(-s.roll_deg*Math.PI/180);tc.translate(0,s.pitch_deg*radius/90);tc.fillStyle='#c2d2b4';tc.fillRect(-radius*3,0,radius*6,radius*6);tc.strokeStyle='#76916a';tc.lineWidth=2;tc.beginPath();tc.moveTo(-radius*3,0);tc.lineTo(radius*3,0);tc.stroke();tc.strokeStyle='#8fa381';tc.lineWidth=1;for(let i=-3;i<=3;i++){if(!i)continue;tc.beginPath();tc.moveTo(-12,i*radius/4);tc.lineTo(12,i*radius/4);tc.stroke();}}
+ tc.restore();tc.strokeStyle='#a4b596';tc.lineWidth=1;tc.beginPath();tc.arc(w/2,h/2+5,radius,0,Math.PI*2);tc.stroke();tc.strokeStyle=valid?'#b89832':'#9eaa94';tc.lineWidth=3;tc.beginPath();tc.moveTo(w/2-32,h/2+5);tc.lineTo(w/2-9,h/2+5);tc.lineTo(w/2,h/2+12);tc.lineTo(w/2+9,h/2+5);tc.lineTo(w/2+32,h/2+5);tc.stroke();tc.fillStyle='#829575';tc.font='10px system-ui';tc.textAlign='center';tc.fillText(valid?'GRAVITY REFERENCE':'TILT UNAVAILABLE',w/2,h-15);
+}
+function imuUpdate(){
+ const s=imu.status==='live'?imu.sample:null;const value=(v,n=2,unit='')=>v==null?'—':v.toFixed(n)+unit;
+ $('imu-status').textContent=s?'IMU LIVE':imu.status==='disabled'?'NOT CONFIGURED':'OFFLINE';$('imu-status').classList.toggle('live',!!s);
+ $('imu-roll').textContent=value(s?.roll_deg,1,'°');$('imu-pitch').textContent=value(s?.pitch_deg,1,'°');
+ ['x','y','z'].forEach((axis,i)=>{$('imu-a'+axis).textContent=value(s?.accel_g[i],3);$('imu-g'+axis).textContent=value(s?.gyro_dps[i],2);});
+ $('imu-hz').textContent=value(imu.hz,1,' Hz');$('imu-temp').textContent=value(s?.temperature_c,1,' °C');$('imu-norm').textContent=value(s?.accel_norm_g,3,' g');$('imu-age').textContent=value(imu.age_ms,0,' ms');
+ $('imu-port').textContent=imu.port?`${imu.port} · ${imu.baud||'detecting'} baud`:'Set --imu-port to connect';
+ $('imu-note').textContent=s?`${s.format==='legacy'?'Legacy stream · temperature not transmitted':'CSV stream'} · Assumed ±${imu.accel_range} g / ±${imu.gyro_range} °/s · Uncalibrated.`:imu.error||'Waiting for fresh IMU data…';
+ $('imu-raw').textContent=s?`Acceleration: ${s.accel_raw.join(', ')}\nGyroscope: ${s.gyro_raw.join(', ')}\nTemperature: ${s.temp_raw??'not transmitted'}\nSamples: ${imu.samples} · Rejected lines: ${imu.rejected}`:'No current sample';drawTilt();
+}
+async function pollIMU(){
+ try{const response=await fetch('/api/imu',{signal:AbortSignal.timeout(1000)});if(!response.ok)throw Error('IMU unavailable');imu=await response.json();}
+ catch{imu={status:'offline',sample:null,error:'IMU connection lost. Check the local server.'};}
+ imuUpdate();setTimeout(pollIMU,100);
+}
+new ResizeObserver(drawTilt).observe(tiltCanvas);pollIMU();

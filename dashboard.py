@@ -9,6 +9,7 @@ import time
 
 from lidar import Parser, detect_port, open_port
 from gps import GPSState, read_gps
+from imu import IMUState, read_imu
 
 
 class ScanState:
@@ -71,20 +72,29 @@ def main():
     cli.add_argument("--port", help="Serial device; otherwise detect automatically")
     cli.add_argument("--gps-port", help="GPS serial device; omitted disables GPS")
     cli.add_argument("--gps-baud", type=int, default=9600)
+    cli.add_argument("--imu-port", help="IMU serial device; omitted disables IMU")
+    cli.add_argument("--imu-baud", type=int, choices=(9600, 115200), help="Default: detect 115200 or 9600")
+    cli.add_argument("--imu-accel-range", type=int, choices=(2, 4, 8, 16), default=2)
+    cli.add_argument("--imu-gyro-range", type=int, choices=(250, 500, 1000, 2000), default=250)
     cli.add_argument("--http-port", type=int, default=8765)
     args = cli.parse_args()
-    if args.gps_port and not args.port:
-        cli.error('--gps-port requires an explicit --port for lidar to avoid probing the GPS port')
-    if args.gps_port == args.port and args.gps_port:
-        cli.error('GPS and lidar must use different serial ports')
+    if (args.gps_port or args.imu_port) and not args.port:
+        cli.error('Additional sensors require an explicit lidar --port to avoid probing their ports')
+    ports = [str(Path(p).resolve()) for p in (args.port, args.gps_port, args.imu_port) if p]
+    if len(ports) != len(set(ports)):
+        cli.error('Each sensor must use a different serial port')
     state, stop = ScanState(), threading.Event()
     gps = GPSState(args.gps_port)
+    imu = IMUState(args.imu_port, args.imu_accel_range, args.imu_gyro_range)
     root = Path(__file__).parent / "web"
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = self.path.split("?", 1)[0]
-            if path == "/api/gps":
+            if path == "/api/imu":
+                data = json.dumps(imu.snapshot(), allow_nan=False).encode()
+                kind = "application/json"
+            elif path == "/api/gps":
                 data = json.dumps(gps.snapshot(), allow_nan=False).encode()
                 kind = "application/json"
             elif path == "/api/scan":
@@ -117,6 +127,10 @@ def main():
     if args.gps_port:
         gps_worker = threading.Thread(target=read_gps, args=(gps, args.gps_baud, stop), daemon=True)
         gps_worker.start()
+    imu_worker = None
+    if args.imu_port:
+        imu_worker = threading.Thread(target=read_imu, args=(imu, args.imu_baud, stop), daemon=True)
+        imu_worker.start()
     print(f"Dashboard: http://127.0.0.1:{args.http_port}", flush=True)
     try:
         server.serve_forever()
@@ -128,6 +142,8 @@ def main():
         worker.join(timeout=3)
         if gps_worker:
             gps_worker.join(timeout=3)
+        if imu_worker:
+            imu_worker.join(timeout=3)
 
 
 if __name__ == "__main__":
