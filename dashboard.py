@@ -8,6 +8,7 @@ import threading
 import time
 
 from lidar import Parser, detect_port, open_port
+from gps import GPSState, read_gps
 
 
 class ScanState:
@@ -68,15 +69,25 @@ def read_sensor(state, device, stop):
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--port", help="Serial device; otherwise detect automatically")
+    cli.add_argument("--gps-port", help="GPS serial device; omitted disables GPS")
+    cli.add_argument("--gps-baud", type=int, default=9600)
     cli.add_argument("--http-port", type=int, default=8765)
     args = cli.parse_args()
+    if args.gps_port and not args.port:
+        cli.error('--gps-port requires an explicit --port for lidar to avoid probing the GPS port')
+    if args.gps_port == args.port and args.gps_port:
+        cli.error('GPS and lidar must use different serial ports')
     state, stop = ScanState(), threading.Event()
+    gps = GPSState(args.gps_port)
     root = Path(__file__).parent / "web"
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = self.path.split("?", 1)[0]
-            if path == "/api/scan":
+            if path == "/api/gps":
+                data = json.dumps(gps.snapshot(), allow_nan=False).encode()
+                kind = "application/json"
+            elif path == "/api/scan":
                 data = json.dumps(state.snapshot()).encode()
                 kind = "application/json"
             elif path in ("/", "/app.js", "/style.css"):
@@ -102,6 +113,10 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", args.http_port), Handler)
     worker = threading.Thread(target=read_sensor, args=(state, args.port, stop), daemon=True)
     worker.start()
+    gps_worker = None
+    if args.gps_port:
+        gps_worker = threading.Thread(target=read_gps, args=(gps, args.gps_baud, stop), daemon=True)
+        gps_worker.start()
     print(f"Dashboard: http://127.0.0.1:{args.http_port}", flush=True)
     try:
         server.serve_forever()
@@ -111,6 +126,8 @@ def main():
         stop.set()
         server.server_close()
         worker.join(timeout=3)
+        if gps_worker:
+            gps_worker.join(timeout=3)
 
 
 if __name__ == "__main__":

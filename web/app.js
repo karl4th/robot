@@ -47,3 +47,40 @@ $('heading').oninput=e=>{heading=Number(e.target.value);$('heading-value').textC
 $('pause').onclick=()=>{frozen=!frozen;$('pause').textContent=frozen?'Resume live':'Freeze view';if(!frozen){scan={...scan,live:false,points:[]};}update();};
 $('reset').onclick=()=>{range=4;heading=0;$('heading').value=0;$('heading-value').textContent='0°';$('range').textContent='4 m';view(false);};
 new ResizeObserver(draw).observe(canvas);setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString('en-GB');if(!frozen&&Date.now()-received>2500&&scan.live){scan.live=false;scan.points=[];scan.error='Waiting for fresh sensor data';update();}},500);poll();
+
+let gps = {status:'offline',track:[]};
+const gpsCanvas=$('gps-track'), gc=gpsCanvas.getContext('2d');
+function gpsTrack(){
+ const r=gpsCanvas.getBoundingClientRect(), w=r.width,h=r.height,dpr=devicePixelRatio||1;
+ gpsCanvas.width=Math.round(w*dpr);gpsCanvas.height=Math.round(h*dpr);gc.setTransform(dpr,0,0,dpr,0,0);
+ gc.clearRect(0,0,w,h);gc.strokeStyle='#cfdbc5';gc.lineWidth=1;
+ for(let x=0;x<w;x+=30){gc.beginPath();gc.moveTo(x,0);gc.lineTo(x,h);gc.stroke();}
+ for(let y=0;y<h;y+=30){gc.beginPath();gc.moveTo(0,y);gc.lineTo(w,y);gc.stroke();}
+ gc.fillStyle='#829775';gc.font='10px system-ui';gc.fillText('N ↑',w-38,25);
+ const track=gps.track||[];
+ if(!track.length){gc.textAlign='center';gc.fillText('Track begins with a valid fix',w/2,h/2);gc.textAlign='left';$('gps-scale').textContent='Waiting for fix';return;}
+ const [lat,lon]=track[0], rad=Math.PI/180;
+ const xy=track.map(p=>[(((p[1]-lon+540)%360)-180)*111320*Math.cos(lat*rad),(p[0]-lat)*111320,p[2]]);
+ const xs=xy.map(p=>p[0]),ys=xy.map(p=>p[1]);const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+ const scale=Math.min((w-65)/Math.max(20,xmax-xmin),(h-80)/Math.max(20,ymax-ymin));
+ const project=p=>[w/2+(p[0]-(xmin+xmax)/2)*scale,h/2-(p[1]-(ymin+ymax)/2)*scale];
+ gc.strokeStyle='#6a8c66';gc.lineWidth=2;gc.beginPath();xy.forEach((p,i)=>{const q=project(p);if(!i||p[2]!==xy[i-1][2])gc.moveTo(...q);else gc.lineTo(...q);});gc.stroke();
+ const start=project(xy[0]),end=project(xy.at(-1));gc.fillStyle='#91aa82';gc.beginPath();gc.arc(...start,3,0,Math.PI*2);gc.fill();gc.fillStyle=gps.status==='live'?'#d7b542':'#a2ac9b';gc.strokeStyle='#fff';gc.lineWidth=2;gc.beginPath();gc.arc(...end,6,0,Math.PI*2);gc.fill();gc.stroke();
+ $('gps-scale').textContent=`${((w-65)/scale).toFixed(0)} m across · ${track.length} fixes${gps.status==='live'?'':' · historical'}`;
+}
+function gpsUpdate(){
+ const live=gps.status==='live';const labels={live:'GPS FIX',no_fix:'NO FIX',offline:'OFFLINE',disabled:'NOT CONFIGURED'};
+ const weak=live&&gps.hdop!=null&&gps.hdop>5;
+ $('gps-status').textContent=weak?'WEAK GEOMETRY':labels[gps.status]||'OFFLINE';$('gps-status').classList.toggle('live',live&&!weak);
+ const value=(v,d=1,s='')=>v==null?'—':v.toFixed(d)+s;
+ $('gps-lat').textContent=live?value(gps.latitude,6,'°'):'—';$('gps-lon').textContent=live?value(gps.longitude,6,'°'):'—';
+ $('gps-sats').textContent=gps.satellites??'—';$('gps-speed').textContent=value(gps.speed_kmh,1,' km/h');$('gps-hdop').textContent=value(gps.hdop);$('gps-alt').textContent=value(gps.altitude_m,1,' m');$('gps-course').textContent=value(gps.course_deg,0,'°');$('gps-age').textContent=gps.age_ms==null?'—':(gps.age_ms/1000).toFixed(1)+' s';$('gps-port').textContent=gps.port||'Set --gps-port to connect';
+ const quality={1:'Autonomous fix',2:'Differential fix',4:'Fixed solution',5:'Float solution'};
+ $('gps-note').textContent=live?`${quality[gps.quality]||'Valid fix'} · ${weak?'High HDOP: position and speed may drift.':'Live GPS independent of lidar freeze.'}`:gps.status==='no_fix'?'Receiver connected. Waiting for a valid satellite fix.':gps.error||'GPS connection lost. Historical track retained.';gpsTrack();
+}
+async function pollGPS(){
+ try{const response=await fetch('/api/gps',{signal:AbortSignal.timeout(2000)});if(!response.ok)throw Error('GPS unavailable');gps=await response.json();}
+ catch{gps={status:'offline',track:gps.track||[],port:gps.port,error:'GPS connection lost. Check the local server.'};}
+ gpsUpdate();setTimeout(pollGPS,500);
+}
+new ResizeObserver(gpsTrack).observe(gpsCanvas);pollGPS();

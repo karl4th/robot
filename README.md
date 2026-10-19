@@ -59,3 +59,27 @@ are not motion-compensated or filtered for obstacle decisions. No wheel odometry
 robot control, battery state, or localization is implied. On data loss, live
 points are cleared; a deliberately frozen view remains labeled. The reader
 retries connection after errors. Use --http-port to change the local HTTP port.
+
+## GPS position and session track
+
+```sh
+uv run dashboard.py --port /dev/cu.usbserial-0001 --gps-port /dev/cu.usbserial-112110
+```
+
+GPS uses 9600 baud by default; override with `--gps-baud`. Both ports must be
+specified and different when GPS is enabled. Omitting `--gps-port` keeps the
+lidar dashboard available with GPS marked as not configured.
+
+The GPS panel shows latitude/longitude, satellites used, HDOP, altitude above
+mean sea level, speed in km/h, course over ground, and fix age. GGA and RMC
+sentences are checksum-validated. The receiver is read only; no configuration
+commands are sent. Transport freshness, position validity, and motion freshness
+are checked separately. A fix older than three seconds is not shown as live.
+
+The north-up track uses a local approximate projection and retains up to 900
+fixes in server memory, about 15 minutes at 1 Hz. Restarting clears it. Connection
+gaps break the line. It does not load map tiles or send coordinates externally.
+Historical tracks remain visible during GPS loss. Lidar freeze does not freeze
+GPS. Raw stationary drift is visible; this is not a filtered route or SLAM, and
+HDOP is dimensionless, not a meter accuracy estimate. Course is travel direction,
+not robot orientation. The GPS and lidar coordinates are not fused.
