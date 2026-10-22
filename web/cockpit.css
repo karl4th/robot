@@ -1,0 +1,75 @@
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#21352a;background:#e9eee7}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{background:linear-gradient(180deg,#16271d 0,#16271d 340px,#e9eee7 340px);min-height:100vh}
+header{height:72px;background:#13231a;color:#f6f8f1;border-bottom:1px solid #ffffff20;padding:0 clamp(18px,3vw,52px);gap:24px;position:sticky;top:0;z-index:1100}
+.brand{color:#f6f8f1;white-space:nowrap}.brand strong{letter-spacing:.13em}.brand span{color:#85a086}
+header nav{display:flex;align-items:center;gap:3px;margin-left:auto;overflow:auto}
+header nav a{font-size:12px;color:#b6cbb9;text-decoration:none;padding:10px 11px;border-radius:8px;white-space:nowrap}
+header nav a:hover,header nav a:focus-visible{background:#ffffff16;color:#fff}
+header .session{margin-left:0;color:#bdd5c2;white-space:nowrap}header time{color:#92ae97;white-space:nowrap}
+main{max-width:1680px;grid-template-columns:minmax(255px,315px) minmax(0,1fr);gap:22px;padding:32px clamp(18px,3vw,52px) 70px}
+.cockpit-intro,.drive-panel,.sensor-setup{grid-column:1/-1}
+.cockpit-intro{color:#f4f7ef;display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,.85fr);gap:25px;align-items:end;padding:15px 2px 5px}
+.cockpit-intro .eyebrow,.drive-panel .eyebrow{color:#b9d787}
+.cockpit-intro h1{font-size:clamp(32px,4vw,58px);line-height:1.04;letter-spacing:-.055em;font-weight:600;margin:12px 0 10px}
+.cockpit-intro p{font-size:14px;color:#b5c8b5;margin:0;line-height:1.5}
+.system-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.system-strip span{display:flex;align-items:center;gap:7px;min-width:0;padding:10px 12px;border:1px solid #ffffff27;border-radius:9px;background:#ffffff0d;color:#c4d5c5;font-size:11px;white-space:nowrap}
+.system-strip b{font-weight:650;color:#f4f8ee;margin-left:auto;overflow:hidden;text-overflow:ellipsis}
+.system-strip i{width:7px;height:7px;flex:none;border-radius:50%;background:#8c958d}.system-strip i.live{background:#b6ec80;box-shadow:0 0 0 3px #b6ec8025}
+.drive-panel{background:#20392a;color:#eef6e9;border:1px solid #426849;border-radius:22px;overflow:hidden;box-shadow:0 20px 55px #0a1d1240}
+.drive-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:25px 30px;border-bottom:1px solid #ffffff1d}
+.drive-heading h2{font-size:25px;letter-spacing:-.04em;margin:5px 0}.drive-heading p{margin:0;color:#aec4ae;font-size:13px;line-height:1.5}
+.drive-badge{border:1px solid #748b75;border-radius:100px;color:#d5dfd3;padding:8px 12px;font-size:11px;white-space:nowrap}
+.drive-badge.live{border-color:#ade582;color:#c8f299;background:#b9e58319}
+.drive-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(350px,.85fr)}
+.drive-setup{padding:24px 30px 22px;border-right:1px solid #ffffff1d}
+.drive-setup summary{font-size:15px;margin:0 0 18px;font-weight:650;cursor:pointer;list-style:none}.drive-setup summary::-webkit-details-marker{display:none}.drive-setup summary:after{content:'⌄';float:right;color:#bfe396}.drive-setup:not([open]){padding-top:15px;padding-bottom:4px}.drive-setup:not([open]) summary:after{content:'›'}
+.drive-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.drive-fields label:last-child{grid-column:1/-1}
+.drive-fields label,.camera-controls label{font-size:11px;letter-spacing:.06em;color:#bfd2bf;font-weight:700;text-transform:uppercase}
+.drive-fields select,.drive-fields input,.camera-controls select{display:block;width:100%;min-width:0;margin-top:7px;padding:11px 12px;border:1px solid #67836b;border-radius:8px;background:#172c1f;color:#f5f8f1;font:inherit;font-size:12px;outline-offset:2px}
+.drive-fields select:focus-visible,.drive-fields input:focus-visible{outline:2px solid #d3ef90}
+.drive-options{display:flex;gap:18px;margin:16px 0;flex-wrap:wrap}.drive-options label{font-size:12px;color:#d1dfd0}.drive-options input{accent-color:#c0ed8c}
+.drive-actions{display:flex;gap:10px;flex-wrap:wrap}.drive-actions button{border:1px solid #65836b;color:#eaf4e6;font-size:12px;font-weight:700;padding:11px 15px}.drive-actions button.primary{background:#c5ec82;color:#1c3422;border-color:#c5ec82}
+.drive-actions button:disabled{opacity:.5;cursor:not-allowed}
+.board-checks{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}.board-checks>div{display:flex;flex-direction:column;gap:6px;background:#152b1e;border:1px solid #49674e;border-radius:10px;padding:13px;min-width:0}.board-checks span{font-size:9px;letter-spacing:.12em;color:#a8c69d}.board-checks strong{font-size:14px;color:#ecb6a4;overflow-wrap:anywhere}.board-checks strong.ok{color:#c3ee8b}.board-checks small{font-size:10px;letter-spacing:0;color:#a7bca6;overflow-wrap:anywhere;margin:0}
+.drive-message{font-size:12px;color:#c5d7c0;line-height:1.45;margin:14px 0 0}.drive-message.error{color:#ffc0a9}
+.drive-control{display:flex;align-items:center;justify-content:center;flex-direction:column;padding:18px 25px 22px;background:radial-gradient(circle at 50% 15%,#31553c,#1b3425 75%)}
+.motor-pad{position:relative;touch-action:none;user-select:none;width:min(250px,55vw);height:min(250px,55vw);border:2px solid #85a984;border-radius:50%;background:radial-gradient(circle,#406348,#1b3223 70%);box-shadow:inset 0 0 28px #0006,0 12px 30px #0003;overflow:hidden;cursor:grab}.motor-pad.disabled{opacity:.48;cursor:not-allowed}.motor-pad:active{cursor:grabbing}
+.motor-axis{position:absolute;background:#a3c39a55;left:50%;top:50%;transform:translate(-50%,-50%)}.motor-axis.x{width:100%;height:1px}.motor-axis.y{width:1px;height:100%}
+.motor-stick{position:absolute;left:50%;top:50%;width:62px;height:62px;border-radius:50%;background:#ceef9c;border:6px solid #e3f8c4;box-shadow:0 6px 20px #0008;transform:translate(-50%,-50%);pointer-events:none}
+.motor-pad .pad-north,.motor-pad .pad-south,.motor-pad .pad-west,.motor-pad .pad-east{position:absolute;font-size:9px;letter-spacing:.12em;color:#d7e5d0;pointer-events:none}.pad-north{top:12px;left:50%;transform:translateX(-50%)}.pad-south{bottom:12px;left:50%;transform:translateX(-50%)}.pad-west{left:9px;top:50%;transform:translateY(-50%)}.pad-east{right:9px;top:50%;transform:translateY(-50%)}
+.motor-output{display:flex;gap:10px;margin-top:13px}.motor-output>div{min-width:100px;text-align:center;background:#14281c;border:1px solid #49674e;border-radius:10px;padding:8px 14px}.motor-output span{display:block;color:#a9c6a7;font-size:9px;letter-spacing:.1em}.motor-output strong{font-size:26px;font-variant-numeric:tabular-nums;letter-spacing:-.04em}.motor-output small{color:#aac1a7;font-size:9px;margin-left:3px}
+.motor-stop{width:min(230px,100%);margin-top:12px;background:#f3a58f;color:#45241c;font-size:14px;font-weight:800;letter-spacing:.1em;padding:11px}.motor-stop:disabled{opacity:.55}
+.drive-caution{border-top:1px solid #ffffff1d;margin:0;padding:10px 30px;color:#aec2aa;font-size:11px;line-height:1.4}
+.sensor-setup{background:#fafcf8;border:1px solid #d8e2d4;border-radius:18px;padding:22px 26px;box-shadow:0 8px 28px #20341f0d}
+.sensor-setup-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.sensor-setup-head h2{font-size:21px;margin:5px 0;letter-spacing:-.035em}.sensor-setup-head p{font-size:12px;color:#748675;margin:0}.sensor-hint{font-size:11px;color:#668067;background:#eaf2e5;border-radius:7px;padding:7px 10px;white-space:nowrap}
+.sensor-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}.sensor-fields label{font-size:10px;color:#617662;letter-spacing:.08em;text-transform:uppercase;font-weight:750}.sensor-fields select{display:block;width:100%;min-width:0;margin-top:7px;border:1px solid #c7d5c4;border-radius:8px;padding:10px;background:#fff;color:#2c4433;font:inherit;font-size:11px;text-transform:none;letter-spacing:0}
+.sensor-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:17px}.sensor-actions button{border:1px solid #c5d4c1;color:#32513a;font-size:11px;font-weight:750}.sensor-actions #sensor-apply{background:#315b3d;color:#fff;border-color:#315b3d}.sensor-actions button:disabled{opacity:.5}.sensor-actions span{font-size:11px;color:#718471}.sensor-actions span.error{color:#a84432}
+main>aside,main>.map-panel{background:#fafcf8;border:1px solid #d8e2d4;border-radius:20px;box-shadow:0 10px 32px #20341f0d}
+main>aside{padding:22px;align-self:start}.map-panel{padding:22px;min-width:0}
+main>aside h1{font-size:24px;margin:7px 0 12px}.robot-card{background:#eaf0e5}.map-top{margin-bottom:16px}.canvas-wrap{height:clamp(380px,49vw,600px);max-height:none}
+.gps-panel{background:#fff;border-color:#d9e3d5;margin-top:22px}.gps-header h2{font-size:21px}.gps-track-wrap{min-height:430px;background:#e8eee6}.gps-layout{grid-template-columns:minmax(220px,.65fr) minmax(0,1.35fr)}
+#gps-map{position:absolute;inset:0;z-index:3;visibility:hidden}.map-ready #gps-map{visibility:visible}.map-ready #gps-track,.map-ready #gps-track-label,.map-ready #gps-scale{visibility:hidden}
+#map-fallback{position:absolute;bottom:12px;left:12px;right:12px;z-index:2;text-align:center;background:#f9fbf2df;border-radius:8px;padding:8px;font-size:11px;color:#61715e}.map-ready #map-fallback{display:none}
+.leaflet-container{font-family:inherit}.leaflet-control-attribution{background:#fffffff0!important;font-size:10px!important}.map-follow{background:#fff;border:1px solid #bccabc;border-radius:5px;box-shadow:0 2px 7px #0002;padding:7px 10px;color:#264c32;font-size:11px;font-weight:700;cursor:pointer}
+.camera-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(240px,.6fr);gap:22px}.camera-frame{position:relative;aspect-ratio:16/9;background:#1a2920;border-radius:12px;overflow:hidden;display:grid;place-items:center}.camera-frame video{width:100%;height:100%;object-fit:contain}.camera-frame #camera-placeholder{position:absolute;color:#c4d5c4;font-size:13px}.camera-controls p{font-size:12px;line-height:1.55;color:#687a69;margin:0 0 18px}.camera-controls label{color:#627864}.camera-controls select{background:#f5f8f2;color:#283d2c;border-color:#c9d7c4}.camera-buttons{display:flex;gap:8px;margin:18px 0}.camera-buttons button{background:#315d3e;color:#fff;font-size:12px;font-weight:700}.camera-buttons button:last-child{background:#e9eee5;color:#31523a}.camera-buttons button:disabled{opacity:.48}.camera-controls #camera-message{margin-top:0}
+@media(min-width:900px){
+ main{grid-template-columns:minmax(320px,360px) minmax(0,1fr);align-items:start}
+ .cockpit-intro{padding-top:0}.cockpit-intro h1{font-size:clamp(30px,3.1vw,47px)}
+ .drive-panel{grid-column:1;grid-row:2;align-self:start}.drive-panel.ready{position:sticky;top:88px;z-index:10}
+ .drive-heading{padding:19px 20px}.drive-heading h2{font-size:22px}.drive-heading p{font-size:11px}.drive-badge{font-size:10px;padding:6px 9px}
+ .drive-grid{display:flex;flex-direction:column}.drive-panel.ready .drive-grid{flex-direction:column-reverse}
+ .drive-setup{border-right:0;border-top:1px solid #ffffff1d;padding:17px 20px}.drive-control{padding:14px 20px 18px}
+ .drive-panel.ready .drive-setup{padding-top:10px;padding-bottom:0}.drive-panel.ready .drive-caution{display:none}
+ .motor-pad{width:min(215px,18vw);height:min(215px,18vw)}.motor-output{margin-top:10px}.motor-output>div{padding:6px 10px}.motor-stop{position:fixed;right:28px;bottom:22px;z-index:1050;width:160px;padding:14px;box-shadow:0 8px 32px #0007}
+ .sensor-setup{grid-column:1/-1;grid-row:4}main>aside{grid-column:1;grid-row:3}main>.map-panel{grid-column:2;grid-row:2/4}
+ .map-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(430px,auto) auto auto;gap:0 16px}
+ .map-panel>.map-top{grid-column:1;grid-row:1}.map-panel>.canvas-wrap{grid-column:1;grid-row:2;height:430px;min-height:430px}.map-panel>.map-bottom{grid-column:1;grid-row:3}.map-panel>.footnote{grid-column:1;grid-row:4}
+ .map-panel>#gps{grid-column:2;grid-row:1/5;margin:0;padding:17px}.map-panel>#gps .gps-layout{display:flex;flex-direction:column-reverse;gap:10px}.map-panel>#gps .gps-track-wrap{height:430px;min-height:430px}.map-panel>#gps .gps-header{margin-bottom:12px}.map-panel>#gps .gps-details{display:grid;grid-template-columns:1fr 1fr;gap:8px}.map-panel>#gps .coordinates{align-content:start}.map-panel>#gps .coordinates strong{font-size:16px}.map-panel>#gps .gps-metrics{margin:0;gap:5px}.map-panel>#gps .gps-metrics b{font-size:11px}.map-panel>#gps .gps-note,.map-panel>#gps code{grid-column:1/-1;margin:0}.map-panel>#gps .footnote{margin-top:8px}
+ .map-panel>#imu,.map-panel>#compass,.map-panel>#camera{grid-column:1/-1}.map-panel>#imu{grid-row:5}.map-panel>#compass{grid-row:6}.map-panel>#camera{grid-row:7}
+}
+@media(min-width:900px) and (max-width:1199px){main{grid-template-columns:minmax(270px,300px) minmax(0,1fr);padding-left:18px;padding-right:18px;gap:14px}.map-panel{padding:14px;column-gap:10px}.map-panel>#gps{padding:12px}.map-panel>#gps .gps-details{display:block}.map-panel>#gps .gps-metrics{margin-top:7px}.motor-pad{width:185px;height:185px}.drive-heading{display:block}.drive-badge{display:inline-block;margin-top:10px}.drive-setup{padding-left:15px;padding-right:15px}.drive-fields{grid-template-columns:1fr}.drive-fields label:last-child{grid-column:auto}.board-checks{grid-template-columns:1fr}}
+@media(max-width:1100px){.cockpit-intro{grid-template-columns:1fr}.system-strip{max-width:760px}.drive-grid{grid-template-columns:1fr 340px}.sensor-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.gps-layout{grid-template-columns:1fr}.gps-track-wrap{height:400px}.camera-grid{grid-template-columns:1fr}}
+@media(max-width:850px){main{display:block;padding:22px 18px 55px}.cockpit-intro,.drive-panel,.sensor-setup,main>aside,main>.map-panel{margin-bottom:18px}.drive-grid{grid-template-columns:1fr}.drive-setup{border-right:0;border-bottom:1px solid #ffffff1d}.drive-control{padding:22px}.motor-pad{width:min(250px,65vw);height:min(250px,65vw)}header nav{order:3;width:100%;margin:0}header{height:auto;min-height:72px;flex-wrap:wrap;padding-top:12px;padding-bottom:8px;gap:8px}header .session{margin-left:auto}header time{display:none}html{scroll-padding-top:120px}}
+@media(max-width:560px){.cockpit-intro h1{font-size:37px}.system-strip{grid-template-columns:repeat(2,1fr)}.drive-heading{padding:20px;display:block}.drive-badge{display:inline-block;margin-top:12px}.drive-setup{padding:20px}.drive-fields{grid-template-columns:1fr}.drive-fields label:last-child{grid-column:auto}.board-checks{grid-template-columns:1fr}.sensor-setup{padding:18px}.sensor-setup-head{display:block}.sensor-hint{display:inline-block;margin-top:10px}.sensor-fields{grid-template-columns:1fr}.map-panel{padding:15px}.gps-panel{padding:16px}.gps-track-wrap{height:350px;min-height:350px}main>aside{padding:20px}.camera-buttons{flex-wrap:wrap}}

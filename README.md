@@ -1,8 +1,8 @@
-# Robot sensor dashboard
+# Robot control center
 
-Local telemetry for a D500 lidar, NEO-6M GPS, MPU6050 IMU and QMC5883L
-magnetometer. A browser dashboard displays scans, GPS tracks, sensor readings
-and acknowledged calibration controls. Requires Python 3.10+ and pyserial.
+One browser page for motor setup and joystick control, lidar scans, a GPS map,
+IMU and compass readings, calibration, and a local camera preview. Requires
+Python 3.10+ and pyserial.
 
 ## Start
 
@@ -11,7 +11,7 @@ With `uv` installed:
 ```sh
 uv sync --locked
 uv run python -m robot.lidar --list-ports
-uv run python -m robot.dashboard --port /dev/cu.usbserial-0001
+uv run python -m robot.dashboard --no-lidar
 ```
 
 On a Pi without `uv`, from the project directory:
@@ -22,13 +22,15 @@ python3 -m venv .venv
 .venv/bin/python -m robot.dashboard --host 0.0.0.0 --no-lidar
 ```
 
-The last command serves the sensor page at `http://<pi-ip>:8765` without
-probing motor ports. Add explicit sensor port options only after identifying
-their devices. Start the separate motor control page with
-`.venv/bin/python -m robot.drive --max-rpm 50` and open
-`http://<pi-ip>:8766`. The two pages link to each other.
+The command serves the unified control center at `http://<pi-ip>:8765` without
+opening a sensor port. Add explicit sensor port options after identifying their
+devices, or choose them in the Sensor connections panel. The pairing code for
+motor and sensor port setup is printed by the server.
 
-Open http://127.0.0.1:8765 for a local-only run. Select actual device ports; USB port names can change.
+Open http://127.0.0.1:8765 for a local-only run. Select actual motor ports in
+the page; USB port names can change. The camera preview uses the browser's
+camera permission and works on localhost or HTTPS. Map tiles need internet;
+the local GPS track remains available without tiles.
 Optional devices use `--gps-port`, `--imu-port` and `--mag-port`. Run
 `uv run python -m robot.dashboard --help` for baud rates and other options.
 Stop with Ctrl+C. Close the dashboard before uploading firmware or opening a
@@ -64,13 +66,13 @@ uv.lock                Locked dependencies
 - [Telemetry and command options](docs/telemetry.md)
 - [Local joystick motor drive](docs/drive.md)
 - [Pi service setup and verified port map](docs/pi-setup.md)
+- [Mac USB setup and live checks](docs/mac-setup.md)
 - [Firmware upload and calibration](firmware/README.md)
 - [Serial protocol](firmware/PROTOCOL.md)
 
 The scan is robot-relative, not SLAM. GPS course describes travel direction.
 Compass calibration acceptance does not establish heading accuracy. Sensor
-fusion and autonomous navigation are not implemented. Manual motor control is
-available through the separate local drive server.
+fusion and autonomous navigation are not implemented.
 
 ## Checks
 

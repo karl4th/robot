@@ -93,6 +93,12 @@ class DriveTests(unittest.TestCase):
                 self.controller.configure(left, right)
         self.assertEqual(self.opened, [])
 
+    def test_sensor_reserved_port_never_opens_as_motor(self):
+        self.controller.reserved_ports = {'/dev/left'}
+        with self.assertRaisesRegex(ValueError, 'assigned to a sensor'):
+            self.connect()
+        self.assertEqual(self.opened, [])
+
     def test_swapped_boards_block_drive_and_show_both_replies(self):
         with self.assertRaises(ConnectionCheckError) as caught:
             self.controller.configure('/dev/right', '/dev/left')

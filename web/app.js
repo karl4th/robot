@@ -3,6 +3,11 @@ const canvas = $('map'), ctx = canvas.getContext('2d');
 let scan = {points:[],live:false}, range = 4, perspective = false, frozen = false, heading = 0;
 let received = 0;
 const fmt = n => n.toLocaleString('en-US');
+function systemStatus(id, label, live){
+ const summary=document.getElementById(id+'-summary'),led=document.getElementById(id+'-led');
+ if(summary)summary.textContent=label;
+ if(led)led.classList.toggle('live',live);
+}
 function robot(x,y){
  ctx.save();ctx.translate(x,y);ctx.shadowColor='#25382330';ctx.shadowBlur=18;ctx.shadowOffsetY=8;
  ctx.fillStyle='#263b30';for(const a of [-1,1])for(const b of [-1,1]){ctx.beginPath();ctx.roundRect(a*38-8,b*23-12,16,24,5);ctx.fill();}
@@ -30,6 +35,7 @@ function draw(){
 }
 function update(){
  $('status').textContent=scan.live?'SENSOR LIVE':'SENSOR OFFLINE';$('dot').classList.toggle('live',scan.live);
+ systemStatus('lidar',scan.live?'Live':'Offline',scan.live);
  $('hz').innerHTML=(scan.live?scan.hz.toFixed(2):'—')+'<small>Hz</small>';
  $('returns').textContent=fmt(scan.points.length);$('packets').textContent=fmt(scan.packets||0);$('crc').textContent=fmt(scan.crc_errors||0);$('age').textContent=scan.age_ms==null?'—':scan.age_ms+' ms';$('port').textContent=scan.port||'Detecting device…';
  $('notice').textContent=frozen?'VIEW FROZEN · Showing a captured scan':scan.live?'':scan.error||'Waiting for sensor data…';draw();
@@ -70,6 +76,7 @@ function gpsTrack(){
 }
 function gpsUpdate(){
  const live=gps.status==='live';const labels={live:'GPS FIX',no_fix:'NO FIX',offline:'OFFLINE',disabled:'NOT CONFIGURED'};
+ systemStatus('gps',live?'Fix':gps.status==='no_fix'?'No fix':'Offline',live);
  const weak=live&&gps.hdop!=null&&gps.hdop>5;
  $('gps-status').textContent=weak?'WEAK GEOMETRY':labels[gps.status]||'OFFLINE';$('gps-status').classList.toggle('live',live&&!weak);
  const value=(v,d=1,s='')=>v==null?'—':v.toFixed(d)+s;
@@ -77,6 +84,7 @@ function gpsUpdate(){
  $('gps-sats').textContent=gps.satellites??'—';$('gps-speed').textContent=value(gps.speed_kmh,1,' km/h');$('gps-hdop').textContent=value(gps.hdop);$('gps-alt').textContent=value(gps.altitude_m,1,' m');$('gps-course').textContent=value(gps.course_deg,0,'°');$('gps-age').textContent=gps.age_ms==null?'—':(gps.age_ms/1000).toFixed(1)+' s';$('gps-port').textContent=gps.port||'Set --gps-port to connect';
  const quality={1:'Autonomous fix',2:'Differential fix',4:'Fixed solution',5:'Float solution'};
  $('gps-note').textContent=live?`${quality[gps.quality]||'Valid fix'} · ${weak?'High HDOP: position and speed may drift.':'Live GPS independent of lidar freeze.'}`:gps.status==='no_fix'?'Receiver connected. Waiting for a valid satellite fix.':gps.error||'GPS connection lost. Historical track retained.';gpsTrack();
+ window.updateGpsMap?.(gps);
 }
 async function pollGPS(){
  try{const response=await fetch('/api/gps',{signal:AbortSignal.timeout(2000)});if(!response.ok)throw Error('GPS unavailable');gps=await response.json();}
@@ -98,6 +106,7 @@ function drawTilt(){
 }
 function imuUpdate(){
  const s=imu.status==='live'?imu.sample:null;const value=(v,n=2,unit='')=>v==null?'—':v.toFixed(n)+unit;
+ systemStatus('imu',s?'Live':'Offline',!!s);
  $('imu-status').textContent=s?(s.flags&8?'CALIBRATING':'IMU LIVE'):imu.status==='disabled'?'NOT CONFIGURED':'OFFLINE';$('imu-status').classList.toggle('live',!!s);
  $('imu-roll').textContent=value(s?.roll_deg,1,'°');$('imu-pitch').textContent=value(s?.pitch_deg,1,'°');
  ['x','y','z'].forEach((axis,i)=>{$('imu-a'+axis).textContent=value(s?.accel_g[i],3);$('imu-g'+axis).textContent=value(s?.gyro_dps[i],2);});
@@ -128,6 +137,7 @@ function drawMag(){
 }
 function magUpdate(){
  const s=mag.status==='live'?mag.sample:null,v=(x,n=1,u='')=>x==null?'—':x.toFixed(n)+u;
+ systemStatus('mag',s?'Live':'Offline',!!s);
  $('mag-status').textContent=s?(s.flags&8?'CALIBRATING':mag.calibrated?'CORRECTION APPLIED':'UNCALIBRATED'):mag.status==='disabled'?'NOT CONFIGURED':'OFFLINE';
  $('mag-norm').textContent=v(s?.norm_ut,1,' µT');
  ['x','y','z'].forEach((a,i)=>{$('mag-r'+a).textContent=s?s.raw[i]:'—';$('mag-'+a).textContent=v(s?.field_ut[i],2);});
@@ -184,11 +194,12 @@ async function pollCalibration(){
 }
 pollCalibration();
 
-// Mount confirmation is local to this browser; no unverified heading is shown.
+// Mount confirmation must be repeated after every page load; the hardware may move.
 const mount=$('compass-mounted'), northMode=$('compass-mode'), declination=$('compass-declination');
 let compassState=null;
+mount.checked=false;
 try {const saved=JSON.parse(localStorage.getItem('rover-compass-v1')||'{}');
- mount.checked=saved.mounted===true;northMode.value=saved.mode==='true'?'true':'magnetic';
+ northMode.value=saved.mode==='true'?'true':'magnetic';
  if(Number.isFinite(saved.declination))declination.value=saved.declination;
 } catch {}
 function renderCompass(){
@@ -205,7 +216,7 @@ function renderCompass(){
  drawMag();
 }
 for(const el of [mount,northMode,declination])el.addEventListener('change',()=>{
- try{localStorage.setItem('rover-compass-v1',JSON.stringify({mounted:mount.checked,mode:northMode.value,declination:declination.value.trim()?Number(declination.value):null}));}catch{}
+ try{localStorage.setItem('rover-compass-v1',JSON.stringify({mode:northMode.value,declination:declination.value.trim()?Number(declination.value):null}));}catch{}
  renderCompass();
 });
 async function pollCompass(){
@@ -214,4 +225,3 @@ async function pollCompass(){
  renderCompass();setTimeout(pollCompass,100);
 }
 pollCompass();
-document.getElementById('drive-link').href = `${location.protocol}//${location.hostname}:8766/`;

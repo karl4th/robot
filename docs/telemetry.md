@@ -171,7 +171,8 @@ suppress the heading. Separate USB reception times are only a freshness check,
 not hardware synchronization; use this compass for slow, gravity-dominated motion.
 
 True north is optional and requires a manually entered local magnetic declination
-in degrees, east positive. Reference and mounting preferences stay in this browser.
+in degrees, east positive. The browser remembers the reference setting but requires
+mounting confirmation after every page load.
 Moving the magnetometer onto a different mount or near steel, motors or power
 wiring can require recalibration in its final installation. Field-strength checks
 cannot detect every magnetic disturbance. This does not align the lidar map or

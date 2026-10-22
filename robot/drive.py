@@ -59,12 +59,13 @@ class DriveController:
         self.checks = {"left": None, "right": None}
         self.status_timeout = status_timeout
         self.error = ""
+        self.reserved_ports = set()
         self.stop_event = threading.Event()
         self.worker = None
 
     def available_ports(self):
         return [{"device": p.device, "description": p.description}
-                for p in list_ports.comports(include_links=True)]
+                for p in list_ports.comports(include_links=True) if p.vid is not None]
 
     def snapshot(self):
         with self.lock:
@@ -128,6 +129,8 @@ class DriveController:
             raise ValueError("Inversion settings must be booleans")
         if {left, right} - {p["device"] for p in self.available_ports()}:
             raise ValueError("Select ports from the current device list")
+        if {str(Path(p).resolve()) for p in (left, right)} & self.reserved_ports:
+            raise ValueError("A selected port is assigned to a sensor")
         with self.lock:
             self._disconnect()
             self.checks = {"left": {"port": left, "expected": "LSTAT,OK", "response": "Not checked", "matched": False},

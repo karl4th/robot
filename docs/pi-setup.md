@@ -17,19 +17,22 @@ are selected and verified on the web setup page.
 | IMU board | `/dev/ttyUSB0` | `1.3.2` | USB I/O error while opening |
 
 The USB camera enumerates as `/dev/video0` but has not returned a frame in
-either tested capture format. The dashboard service therefore includes the
-verified lidar and GPS only. The drive service has a 50 RPM ceiling and prints
-a new pairing code to its journal on every start.
+either tested capture format. The control center service includes the verified
+lidar and GPS, and runs motor controls in the same web server. It has a 50 RPM
+ceiling and prints a new pairing code to its journal on every start. Browser
+camera preview requires localhost or HTTPS and uses a camera attached to the
+browser's computer.
 
 After copying the service files to `/etc/systemd/system/`, run:
 
 ```sh
 sudo systemctl daemon-reload
-sudo systemctl enable --now robot-dashboard.service robot-drive.service
-systemctl status robot-dashboard.service robot-drive.service
-journalctl -u robot-drive.service -b -n 20 --no-pager
+sudo systemctl disable --now robot-drive.service
+sudo systemctl enable --now robot-dashboard.service
+systemctl status robot-dashboard.service
+journalctl -u robot-dashboard.service -b -n 20 --no-pager
 ```
 
-Open `http://<pi-ip>:8765` for sensors and `http://<pi-ip>:8766` for drive
-controls. Use the pairing code from the drive journal. If a device stops
+Open `http://<pi-ip>:8765` for the unified controls and sensors. Use the pairing
+code from the dashboard journal. Map tiles need internet. If a device stops
 responding, inspect the service journal and `journalctl -k -b` for USB errors.
