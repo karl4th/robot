@@ -7,20 +7,27 @@ from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from robot.drive import DriveController, make_handler, mix
+from robot.drive import ConnectionCheckError, DriveController, make_handler, mix
 
 
 class FakePort:
-    def __init__(self, name, baud, timeout, write_timeout):
+    def __init__(self, name, baud, timeout, write_timeout, reply=None):
         self.name = name
         self.writes = []
         self.closed = False
+        self.reply = reply if reply is not None else (b'LSTAT,OK\n' if name == '/dev/left' else b'RSTAT,OK\n')
+        self.pending = []
 
     def write(self, data):
         if self.closed:
             raise OSError("Port closed")
         self.writes.append(data.decode())
+        if data == b'STATUS\n' and self.reply:
+            self.pending.append(self.reply)
         return len(data)
+
+    def readline(self):
+        return self.pending.pop(0) if self.pending else b''
 
     def close(self):
         self.closed = True
@@ -75,6 +82,32 @@ class DriveTests(unittest.TestCase):
                 self.controller.configure(left, right)
         self.assertEqual(self.opened, [])
 
+    def test_swapped_boards_block_drive_and_show_both_replies(self):
+        with self.assertRaises(ConnectionCheckError) as caught:
+            self.controller.configure('/dev/right', '/dev/left')
+        checks = caught.exception.checks
+        self.assertEqual(checks['left']['response'], 'RSTAT,OK')
+        self.assertEqual(checks['right']['response'], 'LSTAT,OK')
+        self.assertFalse(self.controller.snapshot()['connected'])
+        self.assertTrue(all(port.closed for port in self.opened))
+
+    def test_silent_board_blocks_drive(self):
+        self.controller.status_timeout = 0.02
+        original_factory = self.controller.serial_factory
+
+        def silent_right(*args, **kwargs):
+            port = original_factory(*args, **kwargs)
+            if port.name == '/dev/right':
+                port.reply = b''
+            return port
+
+        self.controller.serial_factory = silent_right
+        with self.assertRaises(ConnectionCheckError) as caught:
+            self.connect()
+        self.assertTrue(caught.exception.checks['left']['matched'])
+        self.assertEqual(caught.exception.checks['right']['response'], 'No STATUS response')
+        self.assertFalse(self.controller.snapshot()['connected'])
+
     def test_http_pairing_and_drive(self):
         root = Path(__file__).resolve().parent.parent / 'web'
         server = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(self.controller, '123456', root))
@@ -98,15 +131,32 @@ class DriveTests(unittest.TestCase):
             conn.request('GET', '/')
             page = conn.getresponse()
             self.assertEqual(page.status, 200)
+            self.assertIn(b'Board replies', page.read())
+            conn.close()
+            conn = http.client.HTTPConnection('127.0.0.1', server.server_port)
+            conn.request('GET', '/drive')
+            page = conn.getresponse()
+            self.assertEqual(page.status, 200)
             self.assertIn(b'Drive', page.read())
             conn.close()
             status, _ = post('/api/connect', {'left': '/dev/left', 'right': '/dev/right', 'code': '123456'}, False)
             self.assertEqual(status, 403)
             status, _ = post('/api/connect', {'left': '/dev/left', 'right': '/dev/right', 'code': 'wrong'})
             self.assertEqual(status, 403)
+            status, body = post('/api/connect', {'left': '/dev/right', 'right': '/dev/left', 'code': '123456'})
+            self.assertEqual(status, 409)
+            self.assertEqual(body['checks']['left']['response'], 'RSTAT,OK')
+            self.assertEqual(body['checks']['right']['response'], 'LSTAT,OK')
+            status, _ = post('/api/drive', {'session': 'none', 'x': 0, 'y': 1, 'sequence': 1})
+            self.assertEqual(status, 400)
             status, body = post('/api/connect', {'left': '/dev/left', 'right': '/dev/right', 'code': '123456'})
             self.assertEqual(status, 200)
             session = body['session']
+            self.assertEqual(body['checks']['left']['response'], 'LSTAT,OK')
+            self.assertEqual(body['checks']['right']['response'], 'RSTAT,OK')
+            status, body = post('/api/session', {'session': session})
+            self.assertEqual(status, 200)
+            self.assertEqual(body['left'], '/dev/left')
             status, body = post('/api/drive', {'session': session, 'x': 0, 'y': 1, 'sequence': 1})
             self.assertEqual((status, body['target']), (200, [200, 200]))
             status, body = post('/api/stop', {'session': session, 'sequence': 2})

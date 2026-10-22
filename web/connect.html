@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Connect motor boards</title>
+  <link rel="stylesheet" href="/drive.css">
+  <script src="/connect.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><span class="mark">ROBOT / SETUP</span><span id="connection" class="badge">Disconnected</span></header>
+    <section class="intro"><p class="eyebrow">STEP 01 / CONNECT</p><h1>Identify each side.</h1><p>Choose one serial port for each side. The server asks both boards for their identity before enabling movement.</p></section>
+    <section class="panel setup">
+      <div class="section-title"><span>01</span><h2>Motor ports</h2></div>
+      <div class="fields">
+        <label>Left side port<select id="left"></select></label>
+        <label>Right side port<select id="right"></select></label>
+        <label>Pairing code<input id="code" inputmode="numeric" autocomplete="off" placeholder="Code shown in terminal" maxlength="6"></label>
+      </div>
+      <div class="options"><label><input id="invert-left" type="checkbox"> Reverse left side</label><label><input id="invert-right" type="checkbox"> Reverse right side</label></div>
+      <div class="actions"><button id="refresh" class="secondary">Refresh ports</button><button id="connect">Check and connect</button></div>
+      <p id="message" class="message" role="status" aria-live="polite">Select two ports to check the boards.</p>
+    </section>
+    <section class="panel">
+      <div class="section-title"><span>02</span><h2>Board replies</h2></div>
+      <div class="checks">
+        <div class="check"><span>LEFT SIDE</span><strong id="left-status">Not checked</strong><small id="left-port">Expected: LSTAT,OK</small></div>
+        <div class="check"><span>RIGHT SIDE</span><strong id="right-status">Not checked</strong><small id="right-port">Expected: RSTAT,OK</small></div>
+      </div>
+      <p class="hint">These replies identify the firmware on each selected port. They do not verify the physical wheel wiring.</p>
+      <a id="drive-link" class="button-link disabled" href="/drive" aria-disabled="true">Open drive controls →</a>
+    </section>
+  </main>
+</body>
+</html>

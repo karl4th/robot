@@ -15,6 +15,13 @@ from serial.tools import list_ports
 BAUD = 115200
 COMMAND_PERIOD = 0.05
 COMMAND_TIMEOUT = 0.3
+STATUS_TIMEOUT = 7.0
+
+
+class ConnectionCheckError(ValueError):
+    def __init__(self, message, checks):
+        super().__init__(message)
+        self.checks = checks
 
 
 def mix(x, y):
@@ -26,7 +33,8 @@ def mix(x, y):
 
 
 class DriveController:
-    def __init__(self, max_rpm=200, serial_factory=serial.Serial, clock=time.monotonic):
+    def __init__(self, max_rpm=200, serial_factory=serial.Serial, clock=time.monotonic,
+                 status_timeout=STATUS_TIMEOUT):
         self.max_rpm = max_rpm
         self.serial_factory = serial_factory
         self.clock = clock
@@ -38,6 +46,8 @@ class DriveController:
         self.last_command = 0.0
         self.session = None
         self.sequence = -1
+        self.checks = {"left": None, "right": None}
+        self.status_timeout = status_timeout
         self.error = ""
         self.stop_event = threading.Event()
         self.worker = None
@@ -51,7 +61,28 @@ class DriveController:
             return {"ports": self.available_ports(), "left": self.ports[0],
                     "right": self.ports[1], "connected": all(self.devices),
                     "max_rpm": self.max_rpm, "error": self.error,
-                    "target": list(self.target)}
+                    "target": list(self.target), "checks": self.checks}
+
+    def _probe(self, device, expected, port):
+        deadline = time.monotonic() + self.status_timeout
+        next_request = 0.0
+        response = "No STATUS response"
+        while time.monotonic() < deadline:
+            now = time.monotonic()
+            if now >= next_request:
+                command = b"STATUS\n"
+                if device.write(command) != len(command):
+                    raise serial.SerialException("Incomplete status request")
+                next_request = now + 0.3
+            line = device.readline().decode("ascii", errors="replace").strip()
+            if line in ("LSTAT,OK", "RSTAT,OK"):
+                return {"port": port, "expected": expected, "response": line,
+                        "matched": line == expected}
+            if line.startswith("# CAN DEAD"):
+                response = "Motor controller initialization failed"
+                break
+        return {"port": port, "expected": expected, "response": response,
+                "matched": False}
 
     def _send(self, left, right):
         for device, rpm in zip(self.devices, (left, right)):
@@ -88,15 +119,27 @@ class DriveController:
             raise ValueError("Select ports from the current device list")
         with self.lock:
             self._disconnect()
+            self.checks = {"left": {"port": left, "expected": "LSTAT,OK", "response": "Not checked", "matched": False},
+                           "right": {"port": right, "expected": "RSTAT,OK", "response": "Not checked", "matched": False}}
             opened = []
             try:
                 for port in (left, right):
                     opened.append(self.serial_factory(port, BAUD, timeout=0.1, write_timeout=0.1))
+                for side, device, port, expected in zip(("left", "right"), opened, (left, right),
+                                                        ("LSTAT,OK", "RSTAT,OK")):
+                    try:
+                        self.checks[side] = self._probe(device, expected, port)
+                    except (OSError, serial.SerialException) as exc:
+                        self.checks[side] = {"port": port, "expected": expected,
+                                             "response": f"Serial error: {exc}", "matched": False}
+                if not all(check["matched"] for check in self.checks.values()):
+                    self.error = "Motor board identity check failed"
+                    raise ConnectionCheckError(self.error, self.checks.copy())
                 self.devices = tuple(opened)
                 self.ports = (left, right)
                 self.invert = (invert_left, invert_right)
                 self._send(0, 0)
-            except (OSError, serial.SerialException) as exc:
+            except (OSError, serial.SerialException, ConnectionCheckError) as exc:
                 for device in opened:
                     try:
                         device.close()
@@ -104,13 +147,22 @@ class DriveController:
                         pass
                 self.devices = (None, None)
                 self.error = str(exc)
-                raise ValueError(f"Could not open motor ports: {exc}") from exc
+                if isinstance(exc, ConnectionCheckError):
+                    raise
+                raise ConnectionCheckError(f"Could not open motor ports: {exc}", self.checks.copy()) from exc
             self.target = (0, 0)
             self.last_command = 0.0
             self.session = secrets.token_urlsafe(24)
             self.sequence = -1
             self.error = ""
             return self.session
+
+    def session_snapshot(self, session):
+        with self.lock:
+            if not self.session or session != self.session or not all(self.devices):
+                raise ValueError("Motor boards are not connected")
+            return {"left": self.ports[0], "right": self.ports[1],
+                    "checks": self.checks, "max_rpm": self.max_rpm}
 
     def command(self, session, x, y, sequence):
         with self.lock:
@@ -199,7 +251,9 @@ def make_handler(controller, pairing_code, root):
             if path == "/api/state":
                 self.respond(200, controller.snapshot())
                 return
-            names = {"/": ("drive.html", "text/html"),
+            names = {"/": ("connect.html", "text/html"),
+                     "/drive": ("drive.html", "text/html"),
+                     "/connect.js": ("connect.js", "text/javascript"),
                      "/drive.js": ("drive.js", "text/javascript"),
                      "/drive.css": ("drive.css", "text/css")}
             if path not in names:
@@ -216,7 +270,7 @@ def make_handler(controller, pairing_code, root):
             self.wfile.write(data)
 
         def do_POST(self):
-            if self.path not in ("/api/connect", "/api/drive", "/api/stop"):
+            if self.path not in ("/api/connect", "/api/session", "/api/drive", "/api/stop"):
                 self.send_error(404)
                 return
             origin = self.headers.get("Origin")
@@ -237,13 +291,17 @@ def make_handler(controller, pairing_code, root):
                         return
                     session = controller.configure(body.get("left"), body.get("right"),
                                                    body.get("invert_left", False), body.get("invert_right", False))
-                    result = {"session": session}
+                    result = {"session": session, "checks": controller.snapshot()["checks"]}
+                elif self.path == "/api/session":
+                    result = controller.session_snapshot(body.get("session"))
                 elif self.path == "/api/drive":
                     result = {"target": controller.command(body.get("session"), body.get("x"), body.get("y"), body.get("sequence"))}
                 else:
                     controller.halt(body.get("session"), body.get("sequence"))
                     result = {"target": [0, 0]}
                 self.respond(200, result)
+            except ConnectionCheckError as exc:
+                self.respond(409, {"error": str(exc), "checks": exc.checks})
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 self.respond(400, {"error": str(exc)})
 

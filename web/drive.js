@@ -1,9 +1,10 @@
 const $ = id => document.getElementById(id);
-let session = null;
+let session = sessionStorage.getItem('driveSession');
 let pointer = null;
 let position = {x: 0, y: 0};
 let sending = false;
 let sequence = 0;
+let verified = false;
 const pad = $('pad');
 
 function message(text, error = false) {
@@ -28,20 +29,20 @@ function setConnected(value) {
   pad.classList.toggle('disabled', !value);
 }
 
-async function refreshPorts() {
+async function checkSession() {
+  if (!session) return;
+  const activeSession = session;
   try {
-    const state = await (await fetch('/api/state', {cache: 'no-store'})).json();
-    for (const side of ['left', 'right']) {
-      const select = $(side);
-      const selected = select.value || state[side];
-      select.replaceChildren();
-      select.add(new Option('Select a port', ''));
-      for (const port of state.ports) select.add(new Option(`${port.device} — ${port.description}`, port.device));
-      if (state.ports.some(port => port.device === selected)) select.value = selected;
-    }
-    if (state.error) message(state.error, true);
-    if (session && !state.connected) lostConnection('Motor connection lost. Reconnect the ports.');
-  } catch (error) { message(error.message, true); }
+    const state = await request('/api/session', {session: activeSession});
+    if (session !== activeSession) return;
+    $('left-board').textContent = state.left;
+    $('right-board').textContent = state.right;
+    $('left-reply').textContent = state.checks.left.response;
+    $('right-reply').textContent = state.checks.right.response;
+    verified = true;
+    setConnected(true);
+    message(`Both boards verified. Speed limit: ${state.max_rpm} RPM.`);
+  } catch (error) { if (session === activeSession) lostConnection(error.message); }
 }
 
 function resetStick() {
@@ -53,7 +54,9 @@ function resetStick() {
 }
 
 function lostConnection(text) {
+  sessionStorage.removeItem('driveSession');
   session = null;
+  verified = false;
   pointer = null;
   resetStick();
   setConnected(false);
@@ -70,7 +73,7 @@ async function stop() {
 }
 
 async function sendPosition() {
-  if (!session || pointer === null || sending) return;
+  if (!session || !verified || pointer === null || sending) return;
   sending = true;
   const activeSession = session;
   try {
@@ -97,30 +100,9 @@ function move(event) {
   sendPosition();
 }
 
-$('connect').addEventListener('click', async () => {
-  await stop();
-  if (!$('left').value || !$('right').value || $('left').value === $('right').value) {
-    message('Select two different motor ports.', true); return;
-  }
-  $('connect').disabled = true;
-  message('Opening motor ports...');
-  try {
-    const data = await request('/api/connect', {
-      left: $('left').value, right: $('right').value, code: $('code').value,
-      invert_left: $('invert-left').checked, invert_right: $('invert-right').checked
-    });
-    session = data.session;
-    sequence = 0;
-    setConnected(true);
-    message('Connected. Hold the joystick to drive.');
-  } catch (error) { lostConnection(error.message); }
-  finally { $('connect').disabled = false; }
-});
-
-$('refresh').addEventListener('click', refreshPorts);
 $('stop').addEventListener('click', stop);
 pad.addEventListener('pointerdown', event => {
-  if (!session || pointer !== null) return;
+  if (!session || !verified || pointer !== null) return;
   pointer = event.pointerId;
   pad.setPointerCapture(pointer);
   move(event);
@@ -138,6 +120,7 @@ window.addEventListener('pagehide', () => {
   }).catch(() => {});
 });
 setInterval(sendPosition, 80);
-setInterval(refreshPorts, 2000);
+setInterval(checkSession, 2000);
 setConnected(false);
-refreshPorts();
+if (session) checkSession();
+else { message('Connect and verify the motor boards first.', true); }
