@@ -1,0 +1,18 @@
+[Unit]
+Description=Local robot sensor dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=robot
+Group=robot
+SupplementaryGroups=dialout
+WorkingDirectory=/home/robot/Documents/robot
+ExecStart=/home/robot/Documents/robot/.venv/bin/python -m robot.dashboard --host 0.0.0.0 --http-port 8765 --port /dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3.3:1.0-port0 --gps-port /dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3.4:1.0-port0
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

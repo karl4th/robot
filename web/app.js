@@ -214,3 +214,4 @@ async function pollCompass(){
  renderCompass();setTimeout(pollCompass,100);
 }
 pollCompass();
+document.getElementById('drive-link').href = `${location.protocol}//${location.hostname}:8766/`;

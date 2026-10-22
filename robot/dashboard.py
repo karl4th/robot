@@ -73,6 +73,7 @@ def read_sensor(state, device, stop):
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--port", help="Serial device; otherwise detect automatically")
+    cli.add_argument("--no-lidar", action="store_true", help="Run without opening or probing a lidar port")
     cli.add_argument("--gps-port", help="GPS serial device; omitted disables GPS")
     cli.add_argument("--gps-baud", type=int, default=9600)
     cli.add_argument("--imu-port", help="IMU serial device; omitted disables IMU")
@@ -83,13 +84,18 @@ def main():
     cli.add_argument("--mag-baud", type=int, choices=(9600, 115200), help="Default: detect 115200 or 9600")
     cli.add_argument("--mag-range", type=int, choices=(2, 8), default=8)
     cli.add_argument("--http-port", type=int, default=8765)
+    cli.add_argument("--host", default="127.0.0.1", help="HTTP bind address; use 0.0.0.0 for a trusted LAN")
     args = cli.parse_args()
-    if (args.gps_port or args.imu_port or args.mag_port) and not args.port:
+    if args.no_lidar and args.port:
+        cli.error('--no-lidar cannot be combined with --port')
+    if (args.gps_port or args.imu_port or args.mag_port) and not (args.port or args.no_lidar):
         cli.error('Additional sensors require an explicit lidar --port to avoid probing their ports')
     ports = [str(Path(p).resolve()) for p in (args.port, args.gps_port, args.imu_port, args.mag_port) if p]
     if len(ports) != len(set(ports)):
         cli.error('Each sensor must use a different serial port')
     state, stop = ScanState(), threading.Event()
+    if args.no_lidar:
+        state.error = 'Lidar not configured'
     gps = GPSState(args.gps_port)
     imu = IMUState(args.imu_port, args.imu_accel_range, args.imu_gyro_range)
     mag = MagState(args.mag_port, args.mag_range)
@@ -101,9 +107,9 @@ def main():
             if self.path != '/api/calibration':
                 self.send_error(404)
                 return
+            host = self.headers.get('Host')
             origin = self.headers.get('Origin')
-            allowed = {f'http://127.0.0.1:{args.http_port}', f'http://localhost:{args.http_port}'}
-            if (origin and origin not in allowed) or ('http://' + self.headers.get('Host', '')) not in allowed or self.headers.get('X-Control-Token') != control_token:
+            if not host or origin != f'http://{host}' or self.headers.get('X-Control-Token') != control_token:
                 self.send_error(403)
                 return
             try:
@@ -129,9 +135,6 @@ def main():
         def do_GET(self):
             path = self.path.split("?", 1)[0]
             if path == "/api/calibration":
-                if self.headers.get('Host') not in (f'127.0.0.1:{args.http_port}', f'localhost:{args.http_port}'):
-                    self.send_error(403)
-                    return
                 data = json.dumps(dict(token=control_token, imu=imu.calibration.snapshot(), mag=mag.calibration.snapshot())).encode()
                 kind = "application/json"
             elif path == "/api/compass":
@@ -170,9 +173,11 @@ def main():
         def log_message(self, *_):
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.http_port), Handler)
-    worker = threading.Thread(target=read_sensor, args=(state, args.port, stop), daemon=True)
-    worker.start()
+    server = ThreadingHTTPServer((args.host, args.http_port), Handler)
+    worker = None
+    if not args.no_lidar:
+        worker = threading.Thread(target=read_sensor, args=(state, args.port, stop), daemon=True)
+        worker.start()
     gps_worker = None
     if args.gps_port:
         gps_worker = threading.Thread(target=read_gps, args=(gps, args.gps_baud, stop), daemon=True)
@@ -185,7 +190,7 @@ def main():
     if args.mag_port:
         mag_worker = threading.Thread(target=read_mag, args=(mag, args.mag_baud, stop), daemon=True)
         mag_worker.start()
-    print(f"Dashboard: http://127.0.0.1:{args.http_port}", flush=True)
+    print(f"Dashboard: http://{args.host}:{args.http_port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -193,7 +198,8 @@ def main():
     finally:
         stop.set()
         server.server_close()
-        worker.join(timeout=3)
+        if worker:
+            worker.join(timeout=3)
         if gps_worker:
             gps_worker.join(timeout=3)
         if imu_worker:

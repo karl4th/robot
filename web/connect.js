@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+$('telemetry-link').href = `${location.protocol}//${location.hostname}:8765/`;
 let session = sessionStorage.getItem('driveSession');
 
 function message(text, error = false) {
