@@ -1,5 +1,5 @@
 import unittest
-from imu import IMUState, parse_imu
+from robot.imu import IMUState, parse_imu
 
 
 class IMUTests(unittest.TestCase):
@@ -58,3 +58,23 @@ class IMUTests(unittest.TestCase):
         self.assertEqual(sample['accel_g'], [0, 0, 1])
         self.assertEqual(sample['gyro_dps'], [2, 0, 0])
         self.assertAlmostEqual(sample['temperature_c'], 35.53)
+
+    def test_reader_keeps_port_open_during_init_errors(self):
+        import threading
+        from unittest.mock import patch
+        from robot.imu import read_imu
+        state=IMUState('fake');stop=threading.Event();clock=[100.0]
+        class Port:
+            def __init__(self):self.reads=0
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,n):
+                self.reads+=1;clock[0]+=2
+                if self.reads==5:stop.set()
+                return b'#ERR,IMU_INIT\n'
+        port=Port()
+        with patch('robot.imu.serial.Serial',return_value=port) as constructor, patch('robot.imu.time.monotonic',side_effect=lambda:clock[0]):
+            read_imu(state,115200,stop)
+        self.assertEqual(constructor.call_count,1)
+        self.assertEqual(state.samples,0)
+        self.assertEqual(state.error,'IMU_INIT')

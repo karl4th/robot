@@ -1,6 +1,6 @@
 import time
 import unittest
-from dashboard import ScanState
+from robot.dashboard import ScanState
 
 
 class ScanStateTests(unittest.TestCase):

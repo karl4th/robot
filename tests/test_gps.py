@@ -1,5 +1,5 @@
 import unittest
-from gps import GPSState, coordinate, parse_nmea
+from robot.gps import GPSState, coordinate, parse_nmea
 
 
 def sentence(body):

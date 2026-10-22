@@ -98,13 +98,13 @@ function drawTilt(){
 }
 function imuUpdate(){
  const s=imu.status==='live'?imu.sample:null;const value=(v,n=2,unit='')=>v==null?'—':v.toFixed(n)+unit;
- $('imu-status').textContent=s?'IMU LIVE':imu.status==='disabled'?'NOT CONFIGURED':'OFFLINE';$('imu-status').classList.toggle('live',!!s);
+ $('imu-status').textContent=s?(s.flags&8?'CALIBRATING':'IMU LIVE'):imu.status==='disabled'?'NOT CONFIGURED':'OFFLINE';$('imu-status').classList.toggle('live',!!s);
  $('imu-roll').textContent=value(s?.roll_deg,1,'°');$('imu-pitch').textContent=value(s?.pitch_deg,1,'°');
  ['x','y','z'].forEach((axis,i)=>{$('imu-a'+axis).textContent=value(s?.accel_g[i],3);$('imu-g'+axis).textContent=value(s?.gyro_dps[i],2);});
  $('imu-hz').textContent=value(imu.hz,1,' Hz');$('imu-temp').textContent=value(s?.temperature_c,1,' °C');$('imu-norm').textContent=value(s?.accel_norm_g,3,' g');$('imu-age').textContent=value(imu.age_ms,0,' ms');
  $('imu-port').textContent=imu.port?`${imu.port} · ${imu.baud||'detecting'} baud`:'Set --imu-port to connect';
- $('imu-note').textContent=s?`${s.format==='legacy'?'Legacy stream · temperature not transmitted':'CSV stream'} · Assumed ±${imu.accel_range} g / ±${imu.gyro_range} °/s · Uncalibrated.`:imu.error||'Waiting for fresh IMU data…';
- $('imu-raw').textContent=s?`Acceleration: ${s.accel_raw.join(', ')}\nGyroscope: ${s.gyro_raw.join(', ')}\nTemperature: ${s.temp_raw??'not transmitted'}\nSamples: ${imu.samples} · Rejected lines: ${imu.rejected}`:'No current sample';drawTilt();
+ $('imu-note').textContent=s?(s.format==='v1'?`CRC verified · Device-configured ±2 g / ±250 °/s · Gyro correction ${s.flags&2?'applied':'absent'} · Accel correction ${s.flags&4?'applied':'absent'}.`:`${s.format==='legacy'?'Legacy stream · temperature not transmitted':'CSV stream'} · Assumed ±${imu.accel_range} g / ±${imu.gyro_range} °/s · Uncalibrated.`):imu.error||'Waiting for fresh IMU data…';
+ $('imu-raw').textContent=s?`Acceleration: ${s.accel_raw.join(', ')}\nGyroscope: ${s.gyro_raw.join(', ')}\nTemperature: ${s.temp_raw??'not transmitted'}\nSamples: ${imu.samples} · Rejected lines: ${imu.rejected}${s.format==='v1'?`\nSequence: ${s.sequence} · Device time: ${s.device_ms} ms`:''}`:'No current sample';drawTilt();
 }
 async function pollIMU(){
  try{const response=await fetch('/api/imu',{signal:AbortSignal.timeout(1000)});if(!response.ok)throw Error('IMU unavailable');imu=await response.json();}
@@ -113,6 +113,7 @@ async function pollIMU(){
 }
 new ResizeObserver(drawTilt).observe(tiltCanvas);pollIMU();
 
+let compassAngle=null;
 let mag={status:'offline',sample:null};
 const magCanvas=$('mag-dial'),mc=magCanvas.getContext('2d');
 function drawMag(){
@@ -120,18 +121,18 @@ function drawMag(){
  magCanvas.width=Math.round(w*dpr);magCanvas.height=Math.round(h*dpr);mc.setTransform(dpr,0,0,dpr,0,0);
  mc.clearRect(0,0,w,h);const x=w/2,y=h/2+8,r=Math.min(w*.34,h*.33);mc.strokeStyle='#b0c09f';mc.lineWidth=1;mc.beginPath();mc.arc(x,y,r,0,Math.PI*2);mc.stroke();
  for(let d=0;d<360;d+=15){const a=d*Math.PI/180,inner=r-(d%90===0?10:5);mc.beginPath();mc.moveTo(x+Math.sin(a)*inner,y-Math.cos(a)*inner);mc.lineTo(x+Math.sin(a)*r,y-Math.cos(a)*r);mc.stroke();}
- mc.fillStyle='#78906b';mc.font='10px system-ui';mc.textAlign='center';mc.fillText('+X / 0°',x,y-r-10);mc.fillText('+Y',x+r+18,y+3);mc.fillText('180°',x,y+r+16);
- const angle=mag.status==='live'?mag.sample?.angle_deg:null;
+ mc.fillStyle='#78906b';mc.font='10px system-ui';mc.textAlign='center';mc.fillText('N',x,y-r-10);mc.fillText('E',x+r+18,y+3);mc.fillText('S',x,y+r+16);mc.fillText('W',x-r-18,y+3);
+ const angle=compassAngle;
  if(angle!=null){mc.save();mc.translate(x,y);mc.rotate(angle*Math.PI/180);mc.fillStyle='#d7b542';mc.beginPath();mc.moveTo(0,-r+14);mc.lineTo(-8,9);mc.lineTo(0,3);mc.lineTo(8,9);mc.closePath();mc.fill();mc.restore();}
  mc.fillStyle='#617b55';mc.beginPath();mc.arc(x,y,4,0,Math.PI*2);mc.fill();
 }
 function magUpdate(){
  const s=mag.status==='live'?mag.sample:null,v=(x,n=1,u='')=>x==null?'—':x.toFixed(n)+u;
- $('mag-status').textContent=s?'UNCALIBRATED':mag.status==='disabled'?'NOT CONFIGURED':'OFFLINE';
- $('mag-angle').textContent=v(s?.angle_deg,1,'°');$('mag-norm').textContent=v(s?.norm_ut,1,' µT');
+ $('mag-status').textContent=s?(s.flags&8?'CALIBRATING':mag.calibrated?'CORRECTION APPLIED':'UNCALIBRATED'):mag.status==='disabled'?'NOT CONFIGURED':'OFFLINE';
+ $('mag-norm').textContent=v(s?.norm_ut,1,' µT');
  ['x','y','z'].forEach((a,i)=>{$('mag-r'+a).textContent=s?s.raw[i]:'—';$('mag-'+a).textContent=v(s?.field_ut[i],2);});
  $('mag-hz').textContent=v(mag.hz,1,' Hz');$('mag-age').textContent=v(mag.age_ms,0,' ms');$('mag-count').textContent=mag.samples??'—';$('mag-rejected').textContent=mag.rejected??'—';$('mag-port').textContent=mag.port?`${mag.port} · ${mag.baud||'detecting'} baud`:'Set --mag-port to connect';
- $('mag-note').textContent=s?`${s.format==='legacy'?'Legacy':'CSV'} stream · Assumed ±${mag.field_range} G.${s.clipped?' Range limit reached; angle hidden.':s.unchanged_s>2?' Values unchanged; acquisition freshness unknown.':s.angle_deg==null?' No horizontal field; angle unavailable.':' Sensor axes only; keep level for interpretation.'}`:mag.error||'Waiting for fresh serial data…';drawMag();
+ $('mag-note').textContent=s?`${s.format==='v1'?'CRC verified · Device-configured':s.format==='legacy'?'Legacy stream · Assumed':'CSV stream · Assumed'} ±${mag.field_range} G.${s.clipped?' Range limit reached; angle hidden.':s.unchanged_s>2?' Values unchanged; acquisition freshness unknown.':s.angle_deg==null?' No horizontal field; angle unavailable.':' Field telemetry in sensor axes; robot heading uses both sensors.'}`:mag.error||'Waiting for fresh serial data…';drawMag();
 }
 async function pollMag(){
  try{const response=await fetch('/api/mag',{signal:AbortSignal.timeout(1000)});if(!response.ok)throw Error('Magnetometer unavailable');mag=await response.json();}
@@ -139,3 +140,77 @@ async function pollMag(){
  magUpdate();setTimeout(pollMag,100);
 }
 new ResizeObserver(drawMag).observe(magCanvas);pollMag();
+
+let calState=null,calSensor='imu',calSending=false,calLocalError='';
+const calDialog=$('cal-dialog');
+document.querySelectorAll('[data-cal]').forEach(button=>button.onclick=()=>{calSensor=button.dataset.cal;calLocalError='';calDialog.showModal();renderCalibration();});
+$('cal-close').onclick=()=>calDialog.close();
+function renderCalibration(){
+ if(!calDialog.open)return;
+ const c=calState?.[calSensor],isIMU=calSensor==='imu';
+ $('cal-title').textContent=isIMU?'Calibrate MPU6050':'Calibrate QMC5883L';
+ const labels=isIMU?['Gyro','+X','−X','+Y','−Y','+Z','−Z','Save']:['Rotate','Save'];
+ const index=isIMU?(c?.step||0):(c?.phase==='accepted'||c?.phase==='saved'?1:0);
+ $('cal-steps').replaceChildren(...labels.map((label,i)=>{const e=document.createElement('span');e.textContent=label;e.className=i<index||c?.phase==='saved'?'done':i===index?'current':'';return e;}));
+ let title,description,icon;
+ if(!c?.available){title='Calibration firmware required';description='Upload the calibration sketch, close Serial Monitor, and wait for live IMU1 or MAG1 data. The panel connects automatically.';icon='↥';}
+ else if(c.phase==='saved'){title='Saved. Ready to continue.';description='The board confirmed EEPROM storage. Live measurements already use the accepted corrections.';icon='✓';}
+ else if(c.phase==='accepted'){title='Save calibration';description='All required captures were accepted. Save the coefficients so they survive a board restart.';icon='✓';}
+ else if(isIMU&&index>0&&index<7){const face=['+X','−X','+Y','−Y','+Z','−Z'][index-1];title=`Place ${face} upward`;description=`Point the sensor’s ${face} direction straight up. Use the axis markings on the module. Click Capture, then keep still for about six seconds.`;icon=face+' ↑';}
+ else if(isIMU){title='Keep the sensor still';description='Let the sensor warm up on a stable surface. After Capture, leave it untouched for two seconds of settling and four seconds of measurements.';icon='◎';}
+ else{title='Rotate around all three axes';description='For 60 seconds, slowly turn the sensor in every direction, including upside down. Keep rotating throughout; a flat circle is not enough. Stay away from temporary magnets and metal objects.';icon='↻';}
+ $('cal-icon').textContent=icon;$('cal-instruction').textContent=title;$('cal-description').textContent=description;
+ $('cal-message').textContent=c?.message||'Connecting to calibration service…';$('cal-error').textContent=calLocalError;
+ const running=c?.phase==='running';$('cal-progress').hidden=!running;$('cal-progress').value=running?Math.min(99,c.elapsed/c.duration*100):0;
+ $('cal-time').textContent=running?`${Math.floor(c.elapsed)} s elapsed · estimated ${c.duration} s · waiting for board acceptance`:'';
+ const primary=$('cal-primary');primary.textContent=c?.phase==='saved'?'Done':c?.phase==='accepted'?'Save & continue':c?.phase==='ready'?'Capture this step':c?.pending?'Waiting for board…':'Start calibration';
+ primary.disabled=calSending||!c?.available||!!c?.pending||!!c?.device_busy;
+ $('cal-abort').disabled=calSending||!c?.available||c?.phase==='saved'||(c?.phase==='idle'&&!c?.device_busy);
+}
+async function calibrationAction(action){
+ if(!calState||calSending)return;
+ calSending=true;calLocalError='';renderCalibration();
+ try{const response=await fetch('/api/calibration',{method:'POST',headers:{'Content-Type':'application/json','X-Control-Token':calState.token},body:JSON.stringify({sensor:calSensor,action,session:calState[calSensor].session}),signal:AbortSignal.timeout(3000)});const body=await response.json();if(!response.ok)throw Error(body.error||'Command rejected');
+ const refresh=await fetch('/api/calibration',{signal:AbortSignal.timeout(2000)});if(refresh.ok)calState=await refresh.json();}
+ catch(error){calLocalError=error.message;}
+ finally{calSending=false;renderCalibration();}
+}
+$('cal-primary').onclick=()=>{const c=calState?.[calSensor];if(!c)return;if(c.phase==='saved'){calDialog.close();return;}calibrationAction(c.phase==='accepted'?'save':calSensor==='imu'&&c.phase==='ready'?'capture':'begin');};
+$('cal-abort').onclick=()=>calibrationAction('abort');
+async function pollCalibration(){
+ try{const response=await fetch('/api/calibration',{signal:AbortSignal.timeout(1500)});if(!response.ok)throw Error();calState=await response.json();}
+ catch{calState=null;}
+ renderCalibration();setTimeout(pollCalibration,300);
+}
+pollCalibration();
+
+// Mount confirmation is local to this browser; no unverified heading is shown.
+const mount=$('compass-mounted'), northMode=$('compass-mode'), declination=$('compass-declination');
+let compassState=null;
+try {const saved=JSON.parse(localStorage.getItem('rover-compass-v1')||'{}');
+ mount.checked=saved.mounted===true;northMode.value=saved.mode==='true'?'true':'magnetic';
+ if(Number.isFinite(saved.declination))declination.value=saved.declination;
+} catch {}
+function renderCompass(){
+ const trueNorth=northMode.value==='true',value=declination.value.trim(),d=Number(value);
+ declination.disabled=!trueNorth;
+ let reason=!mount.checked?'Confirm mounting: both sensors +X forward, +Y left, +Z up.':
+ trueNorth&&(!value||!Number.isFinite(d)||Math.abs(d)>180)?'Enter local magnetic declination for true north.':
+ !compassState?.valid?(compassState?.reason||'Waiting for compass data'):'';
+ compassAngle=reason?null:(compassState.heading_deg+(trueNorth?d:0)+360)%360;
+ $('compass-reference').textContent=trueNorth?'True heading':'Magnetic heading';
+ const names=['N','NE','E','SE','S','SW','W','NW'];
+ $('mag-angle').textContent=compassAngle===null?'—':`${compassAngle.toFixed(1)}° ${names[Math.round(compassAngle/45)%8]}`;
+ $('compass-note').textContent=reason||`Robot forward direction · ${trueNorth?'True':'Magnetic'} north · Tilt compensated`;
+ drawMag();
+}
+for(const el of [mount,northMode,declination])el.addEventListener('change',()=>{
+ try{localStorage.setItem('rover-compass-v1',JSON.stringify({mounted:mount.checked,mode:northMode.value,declination:declination.value.trim()?Number(declination.value):null}));}catch{}
+ renderCompass();
+});
+async function pollCompass(){
+ try{const response=await fetch('/api/compass',{signal:AbortSignal.timeout(1000)});if(!response.ok)throw Error();compassState=await response.json();}
+ catch{compassState={valid:false,reason:'Compass connection lost'};}
+ renderCompass();setTimeout(pollCompass,100);
+}
+pollCompass();

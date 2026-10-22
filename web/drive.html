@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Robot drive</title>
+  <link rel="stylesheet" href="/drive.css">
+  <script src="/drive.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><span class="mark">ROBOT / DRIVE</span><span id="connection" class="badge">Disconnected</span></header>
+    <section class="intro"><p class="eyebrow">LOCAL CONTROL</p><h1>Move with care.</h1><p>Select the two motor boards, then hold the joystick to drive. Release it to stop.</p></section>
+    <section class="panel setup">
+      <div class="section-title"><span>01</span><h2>Connect wheels</h2></div>
+      <div class="fields">
+        <label>Left wheel port<select id="left"></select></label>
+        <label>Right wheel port<select id="right"></select></label>
+        <label>Pairing code<input id="code" inputmode="numeric" autocomplete="off" placeholder="Code shown in terminal" maxlength="6"></label>
+      </div>
+      <div class="options"><label><input id="invert-left" type="checkbox"> Reverse left side</label><label><input id="invert-right" type="checkbox"> Reverse right side</label></div>
+      <div class="actions"><button id="refresh" class="secondary">Refresh ports</button><button id="connect">Connect</button></div>
+    </section>
+    <section class="panel controls">
+      <div class="section-title"><span>02</span><h2>Drive</h2></div>
+      <p class="hint">Hold and move the stick. The robot stops when you let go or the connection is lost.</p>
+      <div id="pad" class="pad" aria-label="Drive joystick"><span class="axis vertical"></span><span class="axis horizontal"></span><span id="stick" class="stick"></span><span class="pad-label north">FORWARD</span><span class="pad-label south">REVERSE</span><span class="pad-label west">LEFT</span><span class="pad-label east">RIGHT</span></div>
+      <div class="readout"><div><small>LEFT</small><strong id="left-rpm">0</strong><small>RPM</small></div><div><small>RIGHT</small><strong id="right-rpm">0</strong><small>RPM</small></div></div>
+      <button id="stop" class="stop" disabled>STOP</button>
+      <p id="message" class="message" role="status" aria-live="polite">Select two ports to begin.</p>
+    </section>
+  </main>
+</body>
+</html>

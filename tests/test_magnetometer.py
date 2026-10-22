@@ -1,5 +1,5 @@
 import unittest
-from magnetometer import MagState, parse_mag
+from robot.magnetometer import MagState, parse_mag
 
 
 class MagnetometerTests(unittest.TestCase):
@@ -48,3 +48,32 @@ class MagnetometerTests(unittest.TestCase):
         self.assertAlmostEqual(state.snapshot(now=10.3)['sample']['unchanged_s'],.3)
         state.ingest(b'MAG,11,20,30',now=10.4)
         self.assertEqual(state.snapshot(now=10.4)['sample']['unchanged_s'],0)
+
+    def test_init_diagnostics_are_visible_but_not_measurements(self):
+        state=MagState('test')
+        self.assertFalse(state.ingest(b'#ERR,MAG_INIT',now=10))
+        snapshot=state.snapshot(now=10)
+        self.assertEqual(snapshot['status'],'offline')
+        self.assertEqual(snapshot['error'],'MAG_INIT')
+        self.assertEqual(snapshot['diagnostic'],'#ERR,MAG_INIT')
+        self.assertEqual(snapshot['samples'],0)
+
+    def test_reader_keeps_port_open_during_init_errors(self):
+        import threading
+        from unittest.mock import patch
+        from robot.magnetometer import read_mag
+        state=MagState('fake');stop=threading.Event();clock=[100.0]
+        class Port:
+            def __init__(self):self.reads=0
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,n):
+                self.reads+=1;clock[0]+=2
+                if self.reads==5:stop.set()
+                return b'#ERR,MAG_INIT\n'
+        port=Port()
+        with patch('robot.magnetometer.serial.Serial',return_value=port) as constructor, patch('robot.magnetometer.time.monotonic',side_effect=lambda:clock[0]):
+            read_mag(state,115200,stop)
+        self.assertEqual(constructor.call_count,1)
+        self.assertEqual(state.samples,0)
+        self.assertEqual(state.error,'MAG_INIT')

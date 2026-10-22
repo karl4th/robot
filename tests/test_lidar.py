@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from lidar import Parser, crc8
+from robot.lidar import Parser, crc8
 
 
 def frame():

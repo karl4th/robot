@@ -1,4 +1,4 @@
-"""Local live lidar dashboard. Run with uv run dashboard.py."""
+"""Local live lidar dashboard. Run with uv run python -m robot.dashboard."""
 import argparse
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -6,11 +6,13 @@ import json
 from pathlib import Path
 import threading
 import time
+import secrets
 
-from lidar import Parser, detect_port, open_port
-from gps import GPSState, read_gps
-from imu import IMUState, read_imu
-from magnetometer import MagState, read_mag
+from .lidar import Parser, detect_port, open_port
+from .gps import GPSState, read_gps
+from .imu import IMUState, read_imu
+from .magnetometer import MagState, read_mag
+from .compass import heading
 
 
 class ScanState:
@@ -91,12 +93,52 @@ def main():
     gps = GPSState(args.gps_port)
     imu = IMUState(args.imu_port, args.imu_accel_range, args.imu_gyro_range)
     mag = MagState(args.mag_port, args.mag_range)
-    root = Path(__file__).parent / "web"
+    control_token = secrets.token_urlsafe(32)
+    root = Path(__file__).resolve().parent.parent / "web"
 
     class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path != '/api/calibration':
+                self.send_error(404)
+                return
+            origin = self.headers.get('Origin')
+            allowed = {f'http://127.0.0.1:{args.http_port}', f'http://localhost:{args.http_port}'}
+            if (origin and origin not in allowed) or ('http://' + self.headers.get('Host', '')) not in allowed or self.headers.get('X-Control-Token') != control_token:
+                self.send_error(403)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 512:
+                    raise ValueError('Invalid request size')
+                body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict) or body.get('sensor') not in ('imu', 'mag'):
+                    raise ValueError('Unknown sensor')
+                controller = imu.calibration if body['sensor'] == 'imu' else mag.calibration
+                controller.request(body.get('action'), body.get('session'))
+                data = json.dumps({'ok': True}).encode()
+                code = 200
+            except (ValueError, TypeError) as exc:
+                data = json.dumps({'error': str(exc)}).encode()
+                code = 409
+            self.send_response(code)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_GET(self):
             path = self.path.split("?", 1)[0]
-            if path == "/api/mag":
+            if path == "/api/calibration":
+                if self.headers.get('Host') not in (f'127.0.0.1:{args.http_port}', f'localhost:{args.http_port}'):
+                    self.send_error(403)
+                    return
+                data = json.dumps(dict(token=control_token, imu=imu.calibration.snapshot(), mag=mag.calibration.snapshot())).encode()
+                kind = "application/json"
+            elif path == "/api/compass":
+                now = time.monotonic()
+                data = json.dumps(heading(imu.snapshot(now), mag.snapshot(now)), allow_nan=False).encode()
+                kind = "application/json"
+            elif path == "/api/mag":
                 data = json.dumps(mag.snapshot(), allow_nan=False).encode()
                 kind = "application/json"
             elif path == "/api/imu":
