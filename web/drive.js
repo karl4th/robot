@@ -6,6 +6,8 @@ let sending = false;
 let sequence = 0;
 let verified = false;
 const pad = $('pad');
+const STEERING_DEADZONE = 0.15;
+const THROTTLE_DEADZONE = 0.08;
 
 function message(text, error = false) {
   $('message').textContent = text;
@@ -95,9 +97,16 @@ function move(event) {
   const length = Math.hypot(x, y);
   if (length > 1) { x /= length; y /= length; }
   position = {x, y};
-  $('stick').style.left = `${50 + x * 38}%`;
-  $('stick').style.top = `${50 - y * 38}%`;
+  const shownX = displayAxis(x, STEERING_DEADZONE);
+  const shownY = displayAxis(y, THROTTLE_DEADZONE);
+  $('stick').style.left = `${50 + shownX * 38}%`;
+  $('stick').style.top = `${50 - shownY * 38}%`;
   sendPosition();
+}
+
+function displayAxis(value, width) {
+  if (Math.abs(value) <= width) return 0;
+  return Math.sign(value) * (Math.abs(value) - width) / (1 - width);
 }
 
 $('stop').addEventListener('click', stop);

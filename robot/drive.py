@@ -16,6 +16,8 @@ BAUD = 115200
 COMMAND_PERIOD = 0.05
 COMMAND_TIMEOUT = 0.3
 STATUS_TIMEOUT = 7.0
+STEERING_DEADZONE = 0.15
+THROTTLE_DEADZONE = 0.08
 
 
 class ConnectionCheckError(ValueError):
@@ -28,8 +30,16 @@ def mix(x, y):
     """Map a unit joystick vector to left and right drive fractions."""
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and -1 <= v <= 1 for v in (x, y)):
         raise ValueError("Joystick coordinates must be between -1 and 1")
+    x = _deadzone(x, STEERING_DEADZONE)
+    y = _deadzone(y, THROTTLE_DEADZONE)
     scale = max(1, abs(y + x), abs(y - x))
     return (y + x) / scale, (y - x) / scale
+
+
+def _deadzone(value, width):
+    if abs(value) <= width:
+        return 0.0
+    return (abs(value) - width) / (1 - width) * (1 if value > 0 else -1)
 
 
 class DriveController:
@@ -75,14 +85,15 @@ class DriveController:
                     raise serial.SerialException("Incomplete status request")
                 next_request = now + 0.3
             line = device.readline().decode("ascii", errors="replace").strip()
-            if line in ("LSTAT,OK", "RSTAT,OK"):
+            if line in ("LSTAT,OK", "RSTAT,OK", "L OK", "R OK"):
                 return {"port": port, "expected": expected, "response": line,
-                        "matched": line == expected}
+                        "matched": line == expected,
+                        "role_matched": line[0] == expected[0]}
             if line.startswith("# CAN DEAD"):
                 response = "Motor controller initialization failed"
                 break
         return {"port": port, "expected": expected, "response": response,
-                "matched": False}
+                "matched": False, "role_matched": False}
 
     def _send(self, left, right):
         for device, rpm in zip(self.devices, (left, right)):
@@ -131,9 +142,13 @@ class DriveController:
                         self.checks[side] = self._probe(device, expected, port)
                     except (OSError, serial.SerialException) as exc:
                         self.checks[side] = {"port": port, "expected": expected,
-                                             "response": f"Serial error: {exc}", "matched": False}
+                                             "response": f"Serial error: {exc}", "matched": False,
+                                             "role_matched": False}
                 if not all(check["matched"] for check in self.checks.values()):
-                    self.error = "Motor board identity check failed"
+                    legacy = any(check["response"] in ("L OK", "R OK") for check in self.checks.values())
+                    self.error = ("Board sides identified, but the installed firmware uses an unverified drive protocol"
+                                  if legacy and all(check.get("role_matched") for check in self.checks.values())
+                                  else "Motor board identity check failed")
                     raise ConnectionCheckError(self.error, self.checks.copy())
                 self.devices = tuple(opened)
                 self.ports = (left, right)

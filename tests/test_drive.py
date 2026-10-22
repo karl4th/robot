@@ -66,6 +66,17 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(self.opened[0].writes[-1], '0,0\n')
         self.assertEqual(self.opened[1].writes[-1], '0,0\n')
 
+    def test_straight_corridor_keeps_both_sides_identical(self):
+        self.controller.max_rpm = 50
+        session = self.connect()
+        for sequence, x in enumerate((-0.15, -0.05, 0, 0.05, 0.15), 1):
+            self.assertEqual(self.controller.command(session, x, 1, sequence), [50, 50])
+        self.assertEqual(self.controller.command(session, 0.1, -1, 6), [-50, -50])
+        self.assertEqual(self.controller.command(session, 0.05, 0.05, 7), [0, 0])
+        left, right = self.controller.command(session, 0.4, 1, 8)
+        self.assertGreater(left, right)
+        self.assertEqual(self.controller.command(session, 1, 0, 9), [50, -50])
+
     def test_watchdog_and_disconnect(self):
         session = self.connect()
         self.controller.command(session, 0, -1, 1)
@@ -106,6 +117,23 @@ class DriveTests(unittest.TestCase):
             self.connect()
         self.assertTrue(caught.exception.checks['left']['matched'])
         self.assertEqual(caught.exception.checks['right']['response'], 'No STATUS response')
+        self.assertFalse(self.controller.snapshot()['connected'])
+
+    def test_attached_legacy_replies_identify_sides_but_block_drive(self):
+        original_factory = self.controller.serial_factory
+
+        def legacy(*args, **kwargs):
+            port = original_factory(*args, **kwargs)
+            port.reply = b'L OK\n' if port.name == '/dev/left' else b'R OK\n'
+            return port
+
+        self.controller.serial_factory = legacy
+        with self.assertRaises(ConnectionCheckError) as caught:
+            self.connect()
+        self.assertEqual(caught.exception.checks['left']['response'], 'L OK')
+        self.assertEqual(caught.exception.checks['right']['response'], 'R OK')
+        self.assertTrue(caught.exception.checks['left']['role_matched'])
+        self.assertFalse(caught.exception.checks['left']['matched'])
         self.assertFalse(self.controller.snapshot()['connected'])
 
     def test_http_pairing_and_drive(self):

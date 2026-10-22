@@ -27,6 +27,10 @@ right port returns `RSTAT,OK`. A silent, swapped, or incorrectly programmed
 board remains disconnected. Refresh the port list after plugging in a board.
 Stable `/dev/serial/by-id/...` names are preferred when available.
 
+If a board replies `L OK` or `R OK`, the page shows its reported side but keeps
+drive controls disabled. Those replies come from a different firmware version;
+its movement command format has not been verified against this server.
+
 Both motor boards must run their matching firmware from `firmware/motors_left`
 and `firmware/motors_right`. This server sends their `rpm,0` protocol at 115200
 baud. The right firmware already reverses its motor command. Use the side
