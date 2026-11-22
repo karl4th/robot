@@ -13,6 +13,11 @@ class __FlashStringHelper;
 extern uint32_t fakeTime;
 inline uint32_t millis() { return fakeTime; }
 inline void delay(uint32_t value) { fakeTime += value; }
+inline void delayMicroseconds(uint32_t) {}
+enum { INPUT, OUTPUT, INPUT_PULLUP, LOW = 0, HIGH = 1, A4 = 18, A5 = 19 };
+inline void pinMode(uint8_t, uint8_t) {}
+inline void digitalWrite(uint8_t, uint8_t) {}
+inline int digitalRead(uint8_t) { return HIGH; }
 class Print {
 public:
   virtual ~Print() = default;

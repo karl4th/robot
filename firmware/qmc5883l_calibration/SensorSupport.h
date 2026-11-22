@@ -61,7 +61,23 @@ inline bool verifyReg(uint8_t address, uint8_t reg, uint8_t expected) {
   uint8_t value;
   return readRegs(address, reg, &value, 1) && value == expected;
 }
+// A board reset in the middle of a transfer can leave the sensor holding SDA
+// low, which makes every later read fail until the sensor loses power. Clock
+// SCL (up to nine times) until it releases SDA, then send a STOP condition.
+inline void clearBus() {
+  const uint8_t sda = A4, scl = A5;
+  pinMode(sda, INPUT_PULLUP); pinMode(scl, INPUT_PULLUP);
+  delayMicroseconds(10);
+  for (uint8_t i = 0; i < 9 && digitalRead(sda) == LOW; ++i) {
+    pinMode(scl, OUTPUT); digitalWrite(scl, LOW); delayMicroseconds(10);
+    pinMode(scl, INPUT_PULLUP); delayMicroseconds(10);
+  }
+  pinMode(sda, OUTPUT); digitalWrite(sda, LOW); delayMicroseconds(10);
+  pinMode(scl, INPUT_PULLUP); delayMicroseconds(10);
+  pinMode(sda, INPUT_PULLUP); delayMicroseconds(10);
+}
 inline void beginBus() {
+  clearBus();
   Wire.begin(); Wire.setClock(100000); Wire.setWireTimeout(25000, true);
 }
 
