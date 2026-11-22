@@ -4,9 +4,20 @@ The service files in `deploy/` target a checkout at
 `/home/robot/Documents/robot`. Install `pyserial==3.5` in that checkout's
 virtual environment before starting the services.
 
-The verified USB port map uses physical hub paths. If the hub topology changes,
-recheck `/dev/serial/by-path/` and update the dashboard service. Drive ports
-are selected and verified on the web setup page.
+Ports are not configured by name. The service starts with `--auto-ports`: at
+start it identifies each USB serial device by what it sends (lidar packets at
+230400 baud, NMEA at 9600, `IMU1,`/`MAG1,` frames, `LSTAT,OK`/`RSTAT,OK` replies
+to `STATUS` for the left and right motor boards) and then re-checks every 10 s
+any sensor that is down, so a re-plugged or renumbered device is found again
+without a restart. Healthy sensors and motor boards are never re-probed. A role
+claimed by two ports is left unassigned and reported. Explicit `--port`,
+`--gps-port`, `--imu-port` and `--mag-port` still override discovery, and
+choosing ports in the Sensor connections panel switches auto mode off.
+
+Check the current map without the dashboard (stop the service first, it holds
+the ports): `.venv/bin/python -m robot.ports`.
+
+The table is the map observed once on the bench; names and hub paths will change.
 
 | Device | Observed port | Hub path suffix | Result |
 | --- | --- | --- | --- |

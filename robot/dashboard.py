@@ -10,6 +10,7 @@ import secrets
 from serial.tools import list_ports
 
 from .lidar import Parser, detect_port, open_port
+from .ports import discover
 from .gps import GPSState, read_gps
 from .imu import IMUState, read_imu
 from .magnetometer import MagState, read_mag
@@ -27,6 +28,7 @@ class ScanState:
         self.crc_errors = 0
         self.error = "Waiting for sensor"
         self.port = ""
+        self.hint = None
 
     def snapshot(self):
         with self.lock:
@@ -44,7 +46,9 @@ class ScanState:
 def read_sensor(state, device, stop):
     while not stop.is_set():
         try:
-            selected = device or detect_port()
+            selected = device() if callable(device) else device or detect_port()
+            if not selected:
+                raise RuntimeError("Lidar not found. Waiting for it to appear on a USB port.")
             with open_port(selected) as port:
                 parser = Parser()
                 with state.lock:
@@ -78,11 +82,19 @@ class SensorHub:
     def __init__(self, args):
         self.lock = threading.RLock()
         self.options = args
-        self.ports = {"lidar": None if args.no_lidar else args.port or "auto",
+        self.auto = bool(getattr(args, "auto_ports", False))
+        self.known = dict(getattr(args, "discovered", None) or {})
+        self.motor_ports = lambda: ()
+        self.ports = {"lidar": "auto" if self.auto else None if args.no_lidar else args.port or "auto",
                       "gps": args.gps_port, "imu": args.imu_port, "mag": args.mag_port}
+        if self.auto and args.port:
+            self.ports["lidar"] = args.port
         self.workers = []
         self.stop = threading.Event()
+        self.closed = threading.Event()
         self._start()
+        if self.auto:
+            threading.Thread(target=self._watch, daemon=True).start()
 
     def _start(self):
         self.scan = ScanState()
@@ -90,17 +102,84 @@ class SensorHub:
         self.imu = IMUState(self.ports["imu"], self.options.imu_accel_range,
                             self.options.imu_gyro_range)
         self.mag = MagState(self.ports["mag"], self.options.mag_range)
+        if self.ports["lidar"] not in (None, "auto"):
+            self.scan.hint = self.ports["lidar"]
         if not self.ports["lidar"]:
             self.scan.error = "Lidar not configured"
-        jobs = ((self.ports["lidar"], read_sensor, (self.scan, None if self.ports["lidar"] == "auto" else self.ports["lidar"], self.stop)),
-                (self.ports["gps"], read_gps, (self.gps, self.options.gps_baud, self.stop)),
-                (self.ports["imu"], read_imu, (self.imu, self.options.imu_baud, self.stop)),
-                (self.ports["mag"], read_mag, (self.mag, self.options.mag_baud, self.stop)))
-        for port, target, arguments in jobs:
-            if port:
-                worker = threading.Thread(target=target, args=arguments, daemon=True)
-                worker.start()
-                self.workers.append(worker)
+        for role in ("lidar", "gps", "imu", "mag"):
+            if self.ports[role]:
+                self._spawn(role)
+
+    def _spawn(self, role):
+        o = self.options
+        if role == "lidar":
+            device = ((lambda: self.scan.hint) if self.auto
+                      else None if self.ports["lidar"] == "auto" else self.ports["lidar"])
+            target, arguments = read_sensor, (self.scan, device, self.stop)
+        elif role == "gps":
+            target, arguments = read_gps, (self.gps, o.gps_baud, self.stop)
+        elif role == "imu":
+            target, arguments = read_imu, (self.imu, o.imu_baud, self.stop)
+        else:
+            target, arguments = read_mag, (self.mag, o.mag_baud, self.stop)
+        worker = threading.Thread(target=target, args=arguments, daemon=True)
+        worker.start()
+        self.workers.append(worker)
+
+    def _healthy(self):
+        return {"lidar": self.scan.snapshot()["live"],
+                "gps": self.gps.snapshot()["status"] in ("live", "no_fix"),
+                "imu": self.imu.snapshot()["status"] == "live",
+                "mag": self.mag.snapshot()["status"] == "live"}
+
+    def _assign(self, role, device):
+        """Point a running or new reader at ``device`` without disturbing the others."""
+        if role == "lidar":
+            self.scan.hint = device
+            self.ports["lidar"] = device
+            return
+        state = {"gps": self.gps, "imu": self.imu, "mag": self.mag}[role]
+        fresh = not self.ports[role]
+        with state.lock:
+            state.port = device
+            if fresh:
+                state.error = "Waiting for " + role.upper()
+        self.ports[role] = device
+        if fresh:
+            self._spawn(role)
+
+    def rediscover(self):
+        """Find sensors that are down by what they send and point their readers at them.
+
+        Healthy sensors, motor boards and ports a reader already holds are not
+        probed, so a re-plugged device is found without a restart.
+        """
+        with self.lock:
+            if not self.auto or self.stop.is_set():
+                return {}
+            health = self._healthy()
+            wanted = [role for role, ok in health.items() if not ok]
+            if not wanted:
+                return {}
+            skip = [self.ports[r] for r, ok in health.items() if ok and self.ports[r]]
+            skip += [d for d, role in self.known.items() if role in ("left", "right")]
+            skip += [p for p in self.motor_ports() if p]
+        report = discover(skip=skip)
+        with self.lock:
+            if self.stop.is_set():
+                return {}
+            self.known.update({d: r["role"] for d, r in report["ports"].items() if r["role"]})
+            for role in wanted:
+                if role in report["roles"]:
+                    self._assign(role, report["roles"][role])
+        return report["roles"]
+
+    def _watch(self):
+        while not self.closed.wait(10):
+            try:
+                self.rediscover()
+            except Exception:  # discovery must never take the dashboard down
+                pass
 
     def configure(self, ports, motor_ports):
         if not isinstance(ports, dict) or set(ports) != {"lidar", "gps", "imu", "mag"}:
@@ -125,6 +204,7 @@ class SensorHub:
                 raise RuntimeError("A sensor reader did not stop; ports were not changed")
             self.workers = []
             self.stop = threading.Event()
+            self.auto = False  # an explicit choice in the setup page ends auto mode
             self.ports = selected
             self._start()
             return self.snapshot()
@@ -136,6 +216,7 @@ class SensorHub:
                               for p in list_ports.comports(include_links=True)]}
 
     def close(self):
+        self.closed.set()
         with self.lock:
             self.stop.set()
             for worker in self.workers:
@@ -155,13 +236,28 @@ def main():
     cli.add_argument("--mag-port", help="Magnetometer serial device; omitted disables it")
     cli.add_argument("--mag-baud", type=int, choices=(9600, 115200), help="Default: detect 115200 or 9600")
     cli.add_argument("--mag-range", type=int, choices=(2, 8), default=8)
+    cli.add_argument("--auto-ports", action="store_true",
+                     help="Identify lidar, GPS, IMU and magnetometer by their traffic instead of port names, "
+                          "and re-find them if they are re-plugged. Explicit port options still win.")
     cli.add_argument("--http-port", type=int, default=8765)
     cli.add_argument("--host", default="127.0.0.1", help="HTTP bind address; use 0.0.0.0 for a trusted LAN")
     cli.add_argument("--max-rpm", type=int, default=50, help="Motor speed ceiling")
     args = cli.parse_args()
     if args.no_lidar and args.port:
         cli.error('--no-lidar cannot be combined with --port')
-    if (args.gps_port or args.imu_port or args.mag_port) and not (args.port or args.no_lidar):
+    if args.auto_ports and args.no_lidar:
+        cli.error('--auto-ports cannot be combined with --no-lidar')
+    args.discovered = {}
+    if args.auto_ports:
+        report = discover()
+        for role, option in (("lidar", "port"), ("gps", "gps_port"), ("imu", "imu_port"), ("mag", "mag_port")):
+            if report["roles"].get(role) and not getattr(args, option):
+                setattr(args, option, report["roles"][role])
+        args.discovered = {d: r["role"] for d, r in report["ports"].items() if r["role"]}
+        print("Ports found: " + (", ".join(f"{r}={d}" for r, d in sorted(report["roles"].items())) or "none"), flush=True)
+        for role, devices in report["conflicts"].items():
+            print(f"Ports ambiguous for {role}: {', '.join(devices)}; not assigned", flush=True)
+    if (not args.auto_ports) and (args.gps_port or args.imu_port or args.mag_port) and not (args.port or args.no_lidar):
         cli.error('Additional sensors require an explicit lidar --port to avoid probing their ports')
     ports = [str(Path(p).resolve()) for p in (args.port, args.gps_port, args.imu_port, args.mag_port) if p]
     if len(ports) != len(set(ports)):
@@ -173,6 +269,7 @@ def main():
     root = Path(__file__).resolve().parent.parent / "web"
     drive = DriveController(args.max_rpm)
     drive.reserved_ports = {str(Path(p).resolve()) for p in hub.ports.values() if p and p != "auto"}
+    hub.motor_ports = lambda: [p for p in (drive.snapshot()["left"], drive.snapshot()["right"]) if p]
     configuration_lock = threading.Lock()
     pairing_code = f"{secrets.randbelow(1_000_000):06d}"
     DriveHandler = make_handler(drive, pairing_code, root)
