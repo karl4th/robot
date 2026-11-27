@@ -222,3 +222,23 @@ class WarehouseDriveTests(unittest.TestCase):
         for bad in ("12345", "1234567", "12a456"):
             with self.assertRaises(argparse.ArgumentTypeError):
                 pairing_code(bad)
+
+
+class NoPairingTests(unittest.TestCase):
+    def test_state_reports_whether_a_code_is_needed(self):
+        import json, threading
+        from http.server import ThreadingHTTPServer
+        from pathlib import Path
+        from urllib.request import urlopen
+        from robot.drive import DriveController, make_handler
+        root = Path(__file__).resolve().parent.parent / "web"
+        for code, expected in ((None, False), ("123456", True)):
+            server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(DriveController(50), code, root))
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                with patch("robot.drive.list_ports.comports", return_value=[]):
+                    with urlopen(f"http://127.0.0.1:{server.server_address[1]}/api/state") as response:
+                        self.assertIs(json.loads(response.read())["pairing"], expected)
+            finally:
+                server.shutdown()
+                server.server_close()

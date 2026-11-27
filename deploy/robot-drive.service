@@ -9,9 +9,9 @@ User=robot
 Group=robot
 SupplementaryGroups=dialout
 WorkingDirectory=/home/robot/Documents/robot
-# ROBOT_PAIRING_CODE (six digits) and ROBOT_MAX_RPM live here, readable by root only.
+# ROBOT_MAX_RPM lives here. --no-pairing: meant for the phone's own hotspot; remove it on shared Wi-Fi.
 EnvironmentFile=/etc/robot-drive.env
-ExecStart=/home/robot/Documents/robot/.venv/bin/python -m robot.drive --host 0.0.0.0 --http-port 8766 --max-rpm ${ROBOT_MAX_RPM} --auto-ports
+ExecStart=/home/robot/Documents/robot/.venv/bin/python -m robot.drive --host 0.0.0.0 --http-port 8766 --max-rpm ${ROBOT_MAX_RPM} --auto-ports --no-pairing
 Restart=on-failure
 RestartSec=3
 KillSignal=SIGINT

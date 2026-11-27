@@ -274,7 +274,7 @@ def make_handler(controller, pairing_code, root):
         def do_GET(self):
             path = self.path.split("?", 1)[0]
             if path == "/api/state":
-                self.respond(200, controller.snapshot())
+                self.respond(200, {**controller.snapshot(), "pairing": pairing_code is not None})
                 return
             names = {"/": ("connect.html", "text/html"),
                      "/drive": ("drive.html", "text/html"),
@@ -311,7 +311,7 @@ def make_handler(controller, pairing_code, root):
                 if not isinstance(body, dict):
                     raise ValueError("Expected a JSON object")
                 if self.path == "/api/connect":
-                    if body.get("code") != pairing_code:
+                    if pairing_code is not None and body.get("code") != pairing_code:
                         self.respond(403, {"error": "Invalid pairing code"})
                         return
                     session = controller.configure(body.get("left"), body.get("right"),
@@ -351,6 +351,8 @@ def main():
                         help="Find the left and right boards by their STATUS reply and preselect them")
     parser.add_argument("--pairing-code", type=pairing_code, default=os.environ.get("ROBOT_PAIRING_CODE") or None,
                         help="Fixed six-digit code (or ROBOT_PAIRING_CODE); default: random, printed at start")
+    parser.add_argument("--no-pairing", action="store_true",
+                        help="Connect without a code. Only for a private network such as the phone's own hotspot")
     args = parser.parse_args()
     if not 1 <= args.max_rpm <= 30000:
         parser.error("--max-rpm must be between 1 and 30000")
@@ -365,11 +367,11 @@ def main():
             time.sleep(5)
         controller.suggested = (roles.get("left"), roles.get("right"))
         print(f"Motor boards: left={roles.get('left') or '-'} right={roles.get('right') or '-'}", flush=True)
-    code = args.pairing_code or f"{secrets.randbelow(1_000_000):06d}"
+    code = None if args.no_pairing else args.pairing_code or f"{secrets.randbelow(1_000_000):06d}"
     root = Path(__file__).resolve().parent.parent / "web"
     server = ThreadingHTTPServer((args.host, args.http_port), make_handler(controller, code, root))
     controller.start()
-    shown = code if not args.pairing_code else "(fixed, see ROBOT_PAIRING_CODE)"
+    shown = "not required" if code is None else code if not args.pairing_code else "(fixed, see ROBOT_PAIRING_CODE)"
     print(f"Drive server: http://<device-ip>:{args.http_port}  Pairing code: {shown}", flush=True)
     try:
         server.serve_forever()

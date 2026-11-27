@@ -41,6 +41,7 @@ async function refreshPorts() {
     const response = await fetch('/api/state', {cache: 'no-store'});
     if (!response.ok) throw new Error('Could not read serial ports');
     const state = await response.json();
+    $('code').closest('label').hidden = !state.pairing;
     for (const side of ['left', 'right']) {
       const select = $(side);
       const selected = select.value || state[side];
