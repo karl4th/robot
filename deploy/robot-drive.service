@@ -1,0 +1,21 @@
+[Unit]
+Description=Robot phone joystick (motor boards only, no sensors)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=robot
+Group=robot
+SupplementaryGroups=dialout
+WorkingDirectory=/home/robot/Documents/robot
+# ROBOT_PAIRING_CODE (six digits) and ROBOT_MAX_RPM live here, readable by root only.
+EnvironmentFile=/etc/robot-drive.env
+ExecStart=/home/robot/Documents/robot/.venv/bin/python -m robot.drive --host 0.0.0.0 --http-port 8766 --max-rpm ${ROBOT_MAX_RPM} --auto-ports
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

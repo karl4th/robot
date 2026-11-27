@@ -203,3 +203,22 @@ class DriveTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class WarehouseDriveTests(unittest.TestCase):
+    def test_discovered_ports_are_offered_and_accepted(self):
+        from robot.drive import DriveController
+        controller = DriveController(50)
+        controller.suggested = ("/dev/ttyUSB2", "/dev/ttyUSB0")
+        with patch("robot.drive.list_ports.comports", return_value=[]):
+            state = controller.snapshot()
+        self.assertEqual((state["left"], state["right"]), ("/dev/ttyUSB2", "/dev/ttyUSB0"))
+        self.assertEqual({p["device"] for p in state["ports"]}, {"/dev/ttyUSB2", "/dev/ttyUSB0"})
+
+    def test_pairing_code_must_be_six_digits(self):
+        import argparse
+        from robot.drive import pairing_code
+        self.assertEqual(pairing_code("042917"), "042917")
+        for bad in ("12345", "1234567", "12a456"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                pairing_code(bad)

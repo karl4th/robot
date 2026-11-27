@@ -3,6 +3,7 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import secrets
 import threading
@@ -60,17 +61,23 @@ class DriveController:
         self.status_timeout = status_timeout
         self.error = ""
         self.reserved_ports = set()
+        self.suggested = (None, None)
         self.stop_event = threading.Event()
         self.worker = None
 
     def available_ports(self):
-        return [{"device": p.device, "description": p.description}
-                for p in list_ports.comports(include_links=True) if p.vid is not None]
+        ports = [{"device": p.device, "description": p.description}
+                 for p in list_ports.comports(include_links=True) if p.vid is not None]
+        known = {p["device"] for p in ports}
+        for side, device in zip(("left", "right"), self.suggested):
+            if device and device not in known:
+                ports.append({"device": device, "description": f"{side} motor board (found by reply)"})
+        return ports
 
     def snapshot(self):
         with self.lock:
-            return {"ports": self.available_ports(), "left": self.ports[0],
-                    "right": self.ports[1], "connected": all(self.devices),
+            return {"ports": self.available_ports(), "left": self.ports[0] or self.suggested[0],
+                    "right": self.ports[1] or self.suggested[1], "connected": all(self.devices),
                     "max_rpm": self.max_rpm, "error": self.error,
                     "target": list(self.target), "checks": self.checks}
 
@@ -329,20 +336,41 @@ def make_handler(controller, pairing_code, root):
     return Handler
 
 
+def pairing_code(value):
+    if not (len(value) == 6 and value.isdigit()):
+        raise argparse.ArgumentTypeError("Pairing code must be six digits")
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--http-port", type=int, default=8766)
     parser.add_argument("--max-rpm", type=int, default=200)
+    parser.add_argument("--auto-ports", action="store_true",
+                        help="Find the left and right boards by their STATUS reply and preselect them")
+    parser.add_argument("--pairing-code", type=pairing_code, default=os.environ.get("ROBOT_PAIRING_CODE") or None,
+                        help="Fixed six-digit code (or ROBOT_PAIRING_CODE); default: random, printed at start")
     args = parser.parse_args()
     if not 1 <= args.max_rpm <= 30000:
         parser.error("--max-rpm must be between 1 and 30000")
     controller = DriveController(args.max_rpm)
-    code = f"{secrets.randbelow(1_000_000):06d}"
+    if args.auto_ports:
+        from .ports import discover
+        roles = {}
+        for attempt in range(6):  # at boot the USB boards may enumerate after this service starts
+            roles = discover()["roles"]
+            if roles.get("left") and roles.get("right"):
+                break
+            time.sleep(5)
+        controller.suggested = (roles.get("left"), roles.get("right"))
+        print(f"Motor boards: left={roles.get('left') or '-'} right={roles.get('right') or '-'}", flush=True)
+    code = args.pairing_code or f"{secrets.randbelow(1_000_000):06d}"
     root = Path(__file__).resolve().parent.parent / "web"
     server = ThreadingHTTPServer((args.host, args.http_port), make_handler(controller, code, root))
     controller.start()
-    print(f"Drive server: http://<device-ip>:{args.http_port}  Pairing code: {code}", flush=True)
+    shown = code if not args.pairing_code else "(fixed, see ROBOT_PAIRING_CODE)"
+    print(f"Drive server: http://<device-ip>:{args.http_port}  Pairing code: {shown}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
