@@ -60,7 +60,7 @@
   <section id="lidar">
     <h2><span class="dot" id="lidar-dot"></span>Лидар<span class="port" id="lidar-port"></span></h2>
     <div class="status" id="lidar-status"></div>
-    <canvas id="scan" height="360"></canvas>
+    <canvas id="scan" height="360" style="height:360px"></canvas>
     <div class="row" id="ranges"><span class="note" style="margin:0">Радиус:</span></div>
     <div class="grid" style="margin-top:10px">
       <div class="kv"><span>Частота</span><b id="lidar-hz">–</b></div>
@@ -85,7 +85,7 @@
       <div class="kv"><span>Время UTC</span><b id="gps-utc">–</b></div>
     </div>
     <h3>Трек за сессию (север вверху)</h3>
-    <canvas id="track" height="220"></canvas>
+    <canvas id="track" height="220" style="height:220px"></canvas>
     <div class="note" id="gps-note"></div>
   </section>
 
@@ -105,7 +105,7 @@
       <div class="kv"><span>Отсчёты</span><b id="imu-samples">–</b></div>
     </div>
     <h3>Гироскоп за 10 с</h3>
-    <canvas id="gyro-plot" height="120"></canvas>
+    <canvas id="gyro-plot" height="120" style="height:120px"></canvas>
     <div class="note">Крен и тангаж считаются по гравитации и верны только в покое.</div>
   </section>
 </main>
@@ -147,7 +147,7 @@
 
   function sizeCanvas(c) {
     const r = window.devicePixelRatio || 1, w = c.clientWidth, h = Number(c.getAttribute("height"));
-    if (c.width !== Math.round(w * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); }
+    if (c.width !== Math.round(w * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); c.style.height = `${h}px`; }
     const g = c.getContext("2d"); g.setTransform(r, 0, 0, r, 0, 0); return [g, w, h];
   }
 
