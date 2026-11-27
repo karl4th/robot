@@ -2,12 +2,20 @@
 
 Serial sensors (lidar, GPS, Nano IMU) are found by their traffic on USB ports
 and extra Pi UARTs such as /dev/ttyAMA5; an MPU6050 on the Pi I2C pins is used
-when no Nano IMU answers. Motors are never commanded. Run on the Pi:
+when no Nano IMU answers. Motors are never commanded. A read-only page with the
+live readings is served on --http-port (default 8765); it has no controls.
+Run on the Pi:
 
     .venv/bin/python -m robot.sensors
+
+and open http://<pi-ip>:8765 on a phone or laptop in the same network.
 """
+
 import argparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
 import os
+from pathlib import Path
 import sys
 import threading
 import time
@@ -17,6 +25,8 @@ from .gps import GPSState, read_gps
 from .imu import IMUState, read_imu
 from .imu_i2c import BUS, read_imu_i2c
 from .ports import discover
+
+PAGE = Path(__file__).resolve().parent.parent / "web" / "sensors.html"
 
 
 def summary(scan, gps, imu):
@@ -49,11 +59,50 @@ def summary(scan, gps, imu):
     return lines
 
 
+def readings(scan, gps, imu):
+    """Everything the page shows, as one JSON-ready dict."""
+    return {"time": time.time(),
+            "lidar": scan.snapshot() if scan is not None else None,
+            "gps": gps.snapshot() if gps is not None else None,
+            "imu": imu.snapshot() if imu is not None else None}
+
+
+def make_handler(scan, gps, imu, page=PAGE):
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = self.path.split("?", 1)[0]
+            if path == "/api/readings":
+                data, kind = json.dumps(readings(scan, gps, imu)).encode(), "application/json"
+            elif path in ("/", "/index.html"):
+                data, kind = page.read_bytes(), "text/html"
+            else:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", kind + "; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        def log_message(self, *_):
+            pass
+
+    return Handler
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     cli.add_argument("--seconds", type=float, default=0, help="Stop after this long; 0 runs until Ctrl+C")
     cli.add_argument("--i2c-bus", default=BUS, help="I2C device for a Pi-wired MPU6050; 'none' disables it")
     cli.add_argument("--gps-baud", type=int, default=9600)
+    cli.add_argument("--host", default="0.0.0.0", help="Address for the read-only web page")
+    cli.add_argument("--http-port", type=int, default=8765, help="Web page port; 0 disables the page")
+    cli.add_argument("--quiet", action="store_true", help="Do not print readings every second")
     args = cli.parse_args()
 
     report = discover()
@@ -83,15 +132,25 @@ def main():
     for target, arguments in jobs:
         threading.Thread(target=target, args=arguments, daemon=True).start()
 
+    server = None
+    if args.http_port:
+        server = ThreadingHTTPServer((args.host, args.http_port), make_handler(scan, gps, imu))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        print(f"Readings page: http://{args.host}:{args.http_port}", flush=True)
+
     started = time.monotonic()
     try:
         while not args.seconds or time.monotonic() - started < args.seconds:
             time.sleep(1)
-            print(time.strftime("%H:%M:%S") + "  " + "\n          ".join(summary(scan, gps, imu)), flush=True)
+            if not args.quiet:
+                print(time.strftime("%H:%M:%S") + "  " + "\n          ".join(summary(scan, gps, imu)), flush=True)
     except KeyboardInterrupt:
         pass
     finally:
         stop.set()
+        if server is not None:
+            server.shutdown()
+            server.server_close()
     return 0
 
 

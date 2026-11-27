@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Показания датчиков</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #16181d; --muted: #6b7180; --line: #e2e5ea;
+    --grid: #d9dde3; --accent: #2563eb; --point: #0f766e; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+    --bar: #dbe4f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --panel: #171a21; --text: #e7e9ee; --muted: #9298a6; --line: #262a33;
+      --grid: #2b303a; --accent: #6ea0ff; --point: #2dd4bf; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+      --bar: #23314d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line);
+           background: var(--panel); position: sticky; top: 0; z-index: 1; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .age { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  main { display: grid; gap: 14px; padding: 14px 16px 24px; max-width: 1200px; margin: 0 auto;
+         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+  section h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 0 0 10px; font-weight: 600; }
+  .port { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: auto; font-family: ui-monospace, monospace; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .status { font-size: 13px; color: var(--muted); margin-bottom: 10px; min-height: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px 14px; }
+  .kv span { display: block; color: var(--muted); font-size: 12px; }
+  .kv b { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 16px; }
+  canvas { width: 100%; display: block; border-radius: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .row button { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px;
+                padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .row button.on { border-color: var(--accent); color: var(--accent); }
+  .axes { display: grid; gap: 6px; margin: 6px 0 12px; }
+  .axis { display: grid; grid-template-columns: 22px 1fr 84px; align-items: center; gap: 8px; font-size: 13px; }
+  .axis .track { position: relative; height: 10px; background: var(--bar); border-radius: 5px; overflow: hidden; }
+  .axis .track::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); }
+  .axis .fill { position: absolute; top: 0; bottom: 0; background: var(--accent); }
+  .axis b { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin: 10px 0 0; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="link"></span>
+  <h1>Показания датчиков</h1>
+  <span class="age" id="age">подключение…</span>
+</header>
+<main>
+  <section id="lidar">
+    <h2><span class="dot" id="lidar-dot"></span>Лидар<span class="port" id="lidar-port"></span></h2>
+    <div class="status" id="lidar-status"></div>
+    <canvas id="scan" height="360"></canvas>
+    <div class="row" id="ranges"><span class="note" style="margin:0">Радиус:</span></div>
+    <div class="grid" style="margin-top:10px">
+      <div class="kv"><span>Частота</span><b id="lidar-hz">–</b></div>
+      <div class="kv"><span>Пакеты</span><b id="lidar-packets">–</b></div>
+      <div class="kv"><span>Ошибки CRC</span><b id="lidar-crc">–</b></div>
+      <div class="kv"><span>Ближайшая точка</span><b id="lidar-near">–</b></div>
+    </div>
+    <div class="note">0° вверху, угол растёт по часовой. Это сырой 2D-скан относительно датчика, без фильтрации.</div>
+  </section>
+
+  <section id="gps">
+    <h2><span class="dot" id="gps-dot"></span>GPS<span class="port" id="gps-port"></span></h2>
+    <div class="status" id="gps-status"></div>
+    <div class="grid">
+      <div class="kv"><span>Широта</span><b id="gps-lat">–</b></div>
+      <div class="kv"><span>Долгота</span><b id="gps-lon">–</b></div>
+      <div class="kv"><span>Спутники</span><b id="gps-sats">–</b></div>
+      <div class="kv"><span>HDOP</span><b id="gps-hdop">–</b></div>
+      <div class="kv"><span>Высота</span><b id="gps-alt">–</b></div>
+      <div class="kv"><span>Скорость</span><b id="gps-speed">–</b></div>
+      <div class="kv"><span>Курс</span><b id="gps-course">–</b></div>
+      <div class="kv"><span>Время UTC</span><b id="gps-utc">–</b></div>
+    </div>
+    <h3>Трек за сессию (север вверху)</h3>
+    <canvas id="track" height="220"></canvas>
+    <div class="note" id="gps-note"></div>
+  </section>
+
+  <section id="imu">
+    <h2><span class="dot" id="imu-dot"></span>IMU (MPU6050)<span class="port" id="imu-port"></span></h2>
+    <div class="status" id="imu-status"></div>
+    <h3>Ускорение, g</h3>
+    <div class="axes" id="accel"></div>
+    <h3>Угловая скорость, °/с</h3>
+    <div class="axes" id="gyro"></div>
+    <div class="grid">
+      <div class="kv"><span>|a|</span><b id="imu-norm">–</b></div>
+      <div class="kv"><span>Крен</span><b id="imu-roll">–</b></div>
+      <div class="kv"><span>Тангаж</span><b id="imu-pitch">–</b></div>
+      <div class="kv"><span>Температура</span><b id="imu-temp">–</b></div>
+      <div class="kv"><span>Частота</span><b id="imu-hz">–</b></div>
+      <div class="kv"><span>Отсчёты</span><b id="imu-samples">–</b></div>
+    </div>
+    <h3>Гироскоп за 10 с</h3>
+    <canvas id="gyro-plot" height="120"></canvas>
+    <div class="note">Крен и тангаж считаются по гравитации и верны только в покое.</div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmt = (v, d = 2, unit = "") => v == null || Number.isNaN(v) ? "–" : `${Number(v).toFixed(d)}${unit}`;
+  let range = 4000;
+  [1000, 2000, 4000, 8000, 12000].forEach(mm => {
+    const b = document.createElement("button");
+    b.textContent = `${mm / 1000} м`;
+    b.className = mm === range ? "on" : "";
+    b.onclick = () => { range = mm; document.querySelectorAll("#ranges button").forEach(x => x.classList.toggle("on", x === b)); };
+    $("ranges").appendChild(b);
+  });
+
+  function axisRows(el, names) {
+    return names.map(n => {
+      const row = document.createElement("div");
+      row.className = "axis";
+      row.innerHTML = `<span>${n}</span><div class="track"><div class="fill"></div></div><b>–</b>`;
+      el.appendChild(row);
+      return { fill: row.querySelector(".fill"), value: row.querySelector("b") };
+    });
+  }
+  const accelRows = axisRows($("accel"), ["X", "Y", "Z"]);
+  const gyroRows = axisRows($("gyro"), ["X", "Y", "Z"]);
+  function setAxes(rows, values, limit, digits) {
+    rows.forEach((r, i) => {
+      const v = values ? values[i] : null;
+      if (v == null) { r.fill.style.width = "0"; r.value.textContent = "–"; return; }
+      const f = Math.max(-1, Math.min(1, v / limit)) * 50;
+      r.fill.style.left = f >= 0 ? "50%" : `${50 + f}%`;
+      r.fill.style.width = `${Math.abs(f)}%`;
+      r.value.textContent = (v >= 0 ? "+" : "") + v.toFixed(digits);
+    });
+  }
+
+  function sizeCanvas(c) {
+    const r = window.devicePixelRatio || 1, w = c.clientWidth, h = Number(c.getAttribute("height"));
+    if (c.width !== Math.round(w * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); }
+    const g = c.getContext("2d"); g.setTransform(r, 0, 0, r, 0, 0); return [g, w, h];
+  }
+
+  function drawScan(points) {
+    const [g, w, h] = sizeCanvas($("scan"));
+    const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14, k = R / range;
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = css("--grid"); g.fillStyle = css("--muted"); g.lineWidth = 1; g.font = "11px sans-serif";
+    for (let i = 1; i <= 4; i++) {
+      g.beginPath(); g.arc(cx, cy, R * i / 4, 0, 2 * Math.PI); g.stroke();
+      g.fillText(`${(range * i / 4 / 1000).toFixed(1)} м`, cx + 4, cy - R * i / 4 + 12);
+    }
+    g.beginPath(); g.moveTo(cx, cy - R); g.lineTo(cx, cy + R); g.moveTo(cx - R, cy); g.lineTo(cx + R, cy); g.stroke();
+    g.fillText("0°", cx + 4, cy - R + 2);
+    g.fillStyle = css("--point");
+    for (const [angle, dist] of points) {
+      if (dist > range) continue;
+      const a = angle * Math.PI / 180;
+      g.fillRect(cx + Math.sin(a) * dist * k - 1.2, cy - Math.cos(a) * dist * k - 1.2, 2.4, 2.4);
+    }
+    g.fillStyle = css("--accent");
+    g.beginPath(); g.moveTo(cx, cy - 8); g.lineTo(cx - 6, cy + 6); g.lineTo(cx + 6, cy + 6); g.closePath(); g.fill();
+  }
+
+  function drawTrack(track) {
+    const [g, w, h] = sizeCanvas($("track"));
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = css("--grid"); g.strokeRect(0.5, 0.5, w - 1, h - 1);
+    if (!track || !track.length) { $("gps-note").textContent = "Точек трека пока нет: нужен фикс."; return; }
+    const lat0 = track[track.length - 1][0], lon0 = track[track.length - 1][1];
+    const mx = 111320 * Math.cos(lat0 * Math.PI / 180), my = 110540;
+    const pts = track.map(([la, lo, s]) => [(lo - lon0) * mx, (la - lat0) * my, s]);
+    const span = Math.max(10, ...pts.map(p => Math.max(Math.abs(p[0]), Math.abs(p[1])))) * 1.15;
+    const k = Math.min(w, h) / 2 / span, cx = w / 2, cy = h / 2;
+    g.strokeStyle = css("--accent"); g.lineWidth = 2; g.beginPath();
+    pts.forEach((p, i) => {
+      const x = cx + p[0] * k, y = cy - p[1] * k;
+      if (i === 0 || p[2] !== pts[i - 1][2]) g.moveTo(x, y); else g.lineTo(x, y);
+    });
+    g.stroke();
+    g.fillStyle = css("--bad"); g.beginPath(); g.arc(cx, cy, 4, 0, 2 * Math.PI); g.fill();
+    $("gps-note").textContent = `${track.length} точек, масштаб ±${span.toFixed(0)} м от текущей позиции.`;
+  }
+
+  const gyroHistory = [];
+  function drawGyro() {
+    const [g, w, h] = sizeCanvas($("gyro-plot"));
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = css("--grid"); g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+    if (gyroHistory.length < 2) return;
+    const now = gyroHistory[gyroHistory.length - 1][0];
+    const lim = Math.max(5, ...gyroHistory.flatMap(s => s[1].map(Math.abs))) * 1.1;
+    const colors = [css("--bad"), css("--ok"), css("--accent")];
+    for (let axis = 0; axis < 3; axis++) {
+      g.strokeStyle = colors[axis]; g.lineWidth = 1.5; g.beginPath();
+      gyroHistory.forEach(([t, v], i) => {
+        const x = w - (now - t) / 10000 * w, y = h / 2 - v[axis] / lim * (h / 2 - 4);
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      });
+      g.stroke();
+    }
+    g.fillStyle = css("--muted"); g.font = "11px sans-serif";
+    g.fillText(`±${lim.toFixed(1)} °/с   X красный · Y зелёный · Z синий`, 6, 12);
+  }
+
+  function dot(id, state) { $(id).className = "dot " + state; }
+
+  function show(data) {
+    const L = data.lidar;
+    if (L) {
+      $("lidar-port").textContent = L.port || "";
+      dot("lidar-dot", L.live ? "ok" : "bad");
+      $("lidar-status").textContent = L.live ? "Данные идут" : (L.error || "Нет данных");
+      $("lidar-hz").textContent = fmt(L.hz, 2, " Гц");
+      $("lidar-packets").textContent = L.packets ?? "–";
+      $("lidar-crc").textContent = L.crc_errors ?? "–";
+      const near = L.points.reduce((m, p) => (!m || p[1] < m[1]) ? p : m, null);
+      $("lidar-near").textContent = near ? `${(near[1] / 1000).toFixed(2)} м @ ${near[0].toFixed(0)}°` : "–";
+      drawScan(L.points);
+    } else { $("lidar-status").textContent = "Лидар не найден"; dot("lidar-dot", ""); drawScan([]); }
+
+    const G = data.gps;
+    if (G) {
+      $("gps-port").textContent = G.port || "";
+      dot("gps-dot", G.status === "live" ? "ok" : G.status === "no_fix" ? "warn" : "bad");
+      $("gps-status").textContent = G.status === "live" ? "Есть фикс" : G.status === "no_fix" ? "Связь есть, фикса нет" : (G.error || "Нет данных");
+      $("gps-lat").textContent = fmt(G.latitude, 6);
+      $("gps-lon").textContent = fmt(G.longitude, 6);
+      $("gps-sats").textContent = G.satellites ?? "–";
+      $("gps-hdop").textContent = fmt(G.hdop, 2);
+      $("gps-alt").textContent = fmt(G.altitude_m, 1, " м");
+      $("gps-speed").textContent = fmt(G.speed_kmh, 1, " км/ч");
+      $("gps-course").textContent = fmt(G.course_deg, 0, "°");
+      $("gps-utc").textContent = G.utc ? `${G.utc.slice(0, 2)}:${G.utc.slice(2, 4)}:${G.utc.slice(4, 6)}` : "–";
+      drawTrack(G.track);
+    } else { $("gps-status").textContent = "GPS не найден"; dot("gps-dot", ""); drawTrack([]); }
+
+    const I = data.imu, s = I && I.sample;
+    if (I) {
+      $("imu-port").textContent = I.port || "";
+      dot("imu-dot", I.status === "live" ? "ok" : "bad");
+      $("imu-status").textContent = I.status === "live" ? "Данные идут" : (I.error || "Нет данных");
+      setAxes(accelRows, s && s.accel_g, 2, 3);
+      setAxes(gyroRows, s && s.gyro_dps, 250, 2);
+      $("imu-norm").textContent = fmt(s && s.accel_norm_g, 3, " g");
+      $("imu-roll").textContent = fmt(s && s.roll_deg, 1, "°");
+      $("imu-pitch").textContent = fmt(s && s.pitch_deg, 1, "°");
+      $("imu-temp").textContent = fmt(s && s.temperature_c, 1, " °C");
+      $("imu-hz").textContent = fmt(I.hz, 1, " Гц");
+      $("imu-samples").textContent = I.samples ?? "–";
+      if (s) {
+        const t = Date.now();
+        gyroHistory.push([t, s.gyro_dps]);
+        while (gyroHistory.length && t - gyroHistory[0][0] > 10000) gyroHistory.shift();
+      }
+      drawGyro();
+    } else { $("imu-status").textContent = "IMU не найден"; dot("imu-dot", ""); }
+  }
+
+  let last = 0;
+  async function poll() {
+    try {
+      const r = await fetch("/api/readings", { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      show(await r.json());
+      last = Date.now();
+      dot("link", "ok");
+    } catch (e) {
+      dot("link", "bad");
+    }
+    setTimeout(poll, 200);
+  }
+  setInterval(() => {
+    $("age").textContent = last ? (Date.now() - last < 1500 ? "в эфире" : `нет связи ${Math.round((Date.now() - last) / 1000)} с`) : "подключение…";
+  }, 500);
+  poll();
+})();
+</script>
+</body>
+</html>
