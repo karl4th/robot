@@ -146,7 +146,8 @@
   }
 
   function sizeCanvas(c) {
-    const r = window.devicePixelRatio || 1, w = c.clientWidth, h = Number(c.getAttribute("height"));
+    if (!c.dataset.h) c.dataset.h = c.getAttribute("height");
+    const r = window.devicePixelRatio || 1, w = c.clientWidth, h = Number(c.dataset.h);
     if (c.width !== Math.round(w * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); c.style.height = `${h}px`; }
     const g = c.getContext("2d"); g.setTransform(r, 0, 0, r, 0, 0); return [g, w, h];
   }
