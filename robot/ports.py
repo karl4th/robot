@@ -10,9 +10,12 @@ this robot is recognisable from its traffic:
 * motor boards: answer ``STATUS`` with ``LSTAT,OK`` (left) or ``RSTAT,OK`` (right).
 
 Probing is passive first. Only a port that stays silent is sent ``STATUS``.
-Run ``python -m robot.ports`` to print the current map.
+USB adapters and extra Raspberry Pi UARTs (``/dev/ttyAMA1``-``9``, e.g. GPS on
+UART5 at ``/dev/ttyAMA5``) are probed. Run ``python -m robot.ports`` to print
+the current map.
 """
 import argparse
+import glob
 import json
 import os
 import sys
@@ -126,8 +129,14 @@ def classify(device, factory=serial.Serial, listen=LISTEN_SECONDS,
     return _serial_role(device, factory, listen, motor_wait, clock)
 
 
-def usb_serial_devices():
-    """Physical USB serial ports, once each (links and macOS tty.* twins removed)."""
+# Extra PL011 UARTs enabled with dtoverlay=uartN on a Raspberry Pi 4 (pins, not USB).
+# ttyAMA0 is left out: with serial0 on the mini UART it carries Bluetooth.
+ONBOARD_UARTS = "/dev/ttyAMA[1-9]*"
+
+
+def serial_devices():
+    """Serial ports to probe: USB adapters once each (links and macOS tty.* twins
+    removed) plus extra on-board Raspberry Pi UARTs such as /dev/ttyAMA5."""
     found = {}
     for info in list_ports.comports(include_links=True):
         if info.vid is None:
@@ -136,7 +145,12 @@ def usb_serial_devices():
         if real.startswith("/dev/tty.") and sys.platform == "darwin":
             continue
         found.setdefault(real, info.device if info.device == real else real)
+    for path in glob.glob(ONBOARD_UARTS):
+        found.setdefault(os.path.realpath(path), path)
     return sorted(found)
+
+
+usb_serial_devices = serial_devices
 
 
 def discover(devices=None, skip=(), factory=serial.Serial, listen=LISTEN_SECONDS,
@@ -149,7 +163,7 @@ def discover(devices=None, skip=(), factory=serial.Serial, listen=LISTEN_SECONDS
     ``skip`` lists ports somebody else already holds open (not touched).
     """
     skipped = {os.path.realpath(p) for p in skip if p}
-    devices = [d for d in (usb_serial_devices() if devices is None else devices)
+    devices = [d for d in (serial_devices() if devices is None else devices)
                if os.path.realpath(d) not in skipped]
     results = {}
 
